@@ -121,10 +121,10 @@
  
  // disable_serial_output disables kprintf() *and* unbuffered panic output.
  SECURITY_READ_ONLY_LATE(bool) disable_serial_output = true;
-@@ -55,6 +58,13 @@ PE_init_kprintf_config(void)
+@@ -54,6 +57,13 @@ PE_init_kprintf_config(void)
+ // Do this early, so other code can depend on whether kprintf is enabled.
  STARTUP(TUNABLES, STARTUP_RANK_LAST, PE_init_kprintf_config);
  
- __startup_func
 +static void
 +boot_progress_tee_putc(char c)
 +{
@@ -132,9 +132,9 @@
 +	boot_progress_putc(c);
 +}
 +
+ __startup_func
  static void
  PE_init_kprintf(void)
- {
 @@ -68,6 +78,10 @@ PE_init_kprintf(void)
  		 */
  		PE_kputc = console_write_unbuffered;
