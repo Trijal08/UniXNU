@@ -117,7 +117,7 @@
  
  __startup_func
 +/* With the boot-progress sink active, kprintf goes to the serial port (or console) and to the sink. */
-+static PE_kputc_t boot_progress_tee_target;
++SECURITY_READ_ONLY_LATE(static PE_kputc_t) boot_progress_tee_target;
 +static void
 +boot_progress_tee_putc(char c)
 +{
