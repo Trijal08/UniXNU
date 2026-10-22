@@ -1,0 +1,82 @@
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+index f5bae27..51e220d 100644
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -25,6 +25,9 @@
+ #include <pexpert/device_tree.h>
+ #include <pexpert/arm/consistent_debug.h>
+ #include <pexpert/arm64/board_config.h>
++#ifdef APPLE_UART
++#include <pexpert/arm/apple_uart_regs.h>
++#endif
+ #include <arm64/proc_reg.h>
+ #include <pexpert/arm/protos.h>
+ #include <kern/sched_prim.h>
+@@ -225,6 +228,14 @@ MARK_AS_HIBERNATE_DATA static vm_offset_t dockchannel_uart_base = 0;
+ #ifdef APPLE_UART
+ static int32_t dt_sampling  = -1;
+ static int32_t dt_ubrdiv    = -1;
++/*
++ * UFSTAT bit layout. Apple SoCs keep the S3C layout (4-bit FIFO counts, rx full bit 8, tx full bit 9).
++ * The Exynos revision of the same UART widened the counts: rx count [7:0] with full bit 8, tx count [23:16]
++ * with full bit 24. The boot console node selects the latter with the "exynos-fifo-status" property.
++ */
++static uint32_t apple_uart_ufstat_rx_mask = 0x10f;  /* rx_fifo_full | rx_fifo_count */
++static uint32_t apple_uart_ufstat_tx_mask = 0x2f0;  /* tx_fifo_full | tx_fifo_count */
++static uint32_t apple_uart_ufstat_tx_full = 0x200;
+ 
+ static void apple_uart_set_baud_rate(uint32_t baud_rate);
+ 
+@@ -294,8 +305,7 @@ apple_uart_ack_irq(void)
+ static inline bool
+ apple_uart_fifo_is_empty(void)
+ {
+-	const ufstat_t ufstat = apple_uart_registers->ufstat;
+-	return !(ufstat.tx_fifo_full || ufstat.tx_fifo_count);
++	return (apple_uart_registers->ufstat.raw & apple_uart_ufstat_tx_mask) == 0;
+ }
+ 
+ static void
+@@ -347,7 +357,7 @@ apple_uart_set_baud_rate(uint32_t baud_rate)
+ MARK_AS_HIBERNATE_TEXT static unsigned int
+ apple_uart_transmit_ready(void)
+ {
+-	return !apple_uart_registers->ufstat.tx_fifo_full;
++	return (apple_uart_registers->ufstat.raw & apple_uart_ufstat_tx_full) == 0;
+ }
+ 
+ MARK_AS_HIBERNATE_TEXT static void
+@@ -359,8 +369,7 @@ apple_uart_transmit_data(uint8_t c)
+ static unsigned int
+ apple_uart_receive_ready(void)
+ {
+-	const ufstat_t ufstat = apple_uart_registers->ufstat;
+-	return ufstat.rx_fifo_full || ufstat.rx_fifo_count;
++	return (apple_uart_registers->ufstat.raw & apple_uart_ufstat_rx_mask) != 0;
+ }
+ 
+ static uint8_t
+@@ -927,6 +936,13 @@ serial_init(void)
+ 		if (prop_value) {
+ 			dt_ubrdiv = *prop_value;
+ 		}
++		prop_value = NULL;
++		SecureDTGetProperty(entryP, "exynos-fifo-status", (void const **)&prop_value, &prop_size);
++		if (prop_value) {
++			apple_uart_ufstat_rx_mask = 0x1ff;
++			apple_uart_ufstat_tx_mask = 0x1ff0000;
++			apple_uart_ufstat_tx_full = 0x1000000;
++		}
+ 
+ 		prop_value = NULL;
+ 		SecureDTGetProperty(entryP, "interrupts", (void const **)&prop_value, &prop_size);
+--- a/pexpert/pexpert/arm64/board_config.h
++++ b/pexpert/pexpert/arm64/board_config.h
+@@ -138,6 +138,7 @@
+ #define MAX_CPU_CLUSTERS               1
+ 
+ #define CORE_NCTRS                     8 /* Placeholder; KPC is not enabled for this target */
++#define APPLE_UART                     1 /* UniXNU: boards with a Samsung-layout UART use the Apple UART driver */
+ #endif  /* ARM64_BOARD_CONFIG_BCM2837 */
+ 
+ #ifdef ARM64_BOARD_CONFIG_VMAPPLE
