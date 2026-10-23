@@ -12,7 +12,24 @@ index f5bae27..51e220d 100644
  #include <arm64/proc_reg.h>
  #include <pexpert/arm/protos.h>
  #include <kern/sched_prim.h>
-@@ -225,6 +228,14 @@ MARK_AS_HIBERNATE_DATA static vm_offset_t dockchannel_uart_base = 0;
+@@ -200,7 +203,15 @@ get_serial_functions(serial_device_t device)
+ static inline void
+ serial_poll(void)
+ {
+-#if __arm64__
++#if __arm64__ && defined(ARM64_BOARD_CONFIG_BCM2837)
++	/*
++	 * UniXNU boards: a WFE here only returns on the next event or interrupt. On the Tensor G4 the
++	 * timebase event stream did not wake the core, so every console byte waited for the next timer
++	 * interrupt and the whole boot crawled at about one character per millisecond. Spin instead:
++	 * the polled transmit path is only used while the console drains.
++	 */
++	__asm__ volatile ("yield" ::: "memory");
++#elif __arm64__
+ 	if (!uart_hibernation) {
+ 		__builtin_arm_wfe();
+ 	}
+@@ -225,6 +236,14 @@ MARK_AS_HIBERNATE_DATA static vm_offset_t dockchannel_uart_base = 0;
  #ifdef APPLE_UART
  static int32_t dt_sampling  = -1;
  static int32_t dt_ubrdiv    = -1;
@@ -27,7 +44,7 @@ index f5bae27..51e220d 100644
  
  static void apple_uart_set_baud_rate(uint32_t baud_rate);
  
-@@ -294,8 +305,7 @@ apple_uart_ack_irq(void)
+@@ -294,8 +313,7 @@ apple_uart_ack_irq(void)
  static inline bool
  apple_uart_fifo_is_empty(void)
  {
@@ -37,7 +54,7 @@ index f5bae27..51e220d 100644
  }
  
  static void
-@@ -347,7 +357,7 @@ apple_uart_set_baud_rate(uint32_t baud_rate)
+@@ -347,7 +365,7 @@ apple_uart_set_baud_rate(uint32_t baud_rate)
  MARK_AS_HIBERNATE_TEXT static unsigned int
  apple_uart_transmit_ready(void)
  {
@@ -46,7 +63,7 @@ index f5bae27..51e220d 100644
  }
  
  MARK_AS_HIBERNATE_TEXT static void
-@@ -359,8 +369,7 @@ apple_uart_transmit_data(uint8_t c)
+@@ -359,8 +377,7 @@ apple_uart_transmit_data(uint8_t c)
  static unsigned int
  apple_uart_receive_ready(void)
  {
@@ -56,7 +73,7 @@ index f5bae27..51e220d 100644
  }
  
  static uint8_t
-@@ -927,6 +936,13 @@ serial_init(void)
+@@ -927,6 +944,13 @@ serial_init(void)
  		if (prop_value) {
  			dt_ubrdiv = *prop_value;
  		}
