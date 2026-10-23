@@ -136,7 +136,10 @@ for source in (ROOT / 'kits/VerifiedRoot/src/verified_root.c', ROOT / 'kits/Veri
         elif value not in ('-MD', '-MP'):
             command.append(value)
         index += 1
-    command += ['-I' + str(ROOT / 'kits/VerifiedRoot/include'), '-Werror']
+    # The Linux kernel tree exports no libsa headers while the record names the directory, and clang 23 reports the
+    # kernel's layered machine/ headers as shadowing each other; Apple's clang knows neither option.
+    command += ['-I' + str(ROOT / 'kits/VerifiedRoot/include'), '-Werror', '-Wno-unknown-warning-option',
+                '-Wno-missing-include-dirs', '-Wno-shadow-header']
     result = subprocess.run(command, cwd=record['directory'], capture_output=True, text=True)
     (out / (source.stem + '.log')).write_text(result.stdout + result.stderr)
     if result.returncode:
