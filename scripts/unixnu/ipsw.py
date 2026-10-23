@@ -169,6 +169,61 @@ class Ipsw:
     def read(self, component):
         return self.zip.read(self.member(component))
 
+    def open_member(self, component):
+        """A seekable, read-only view of a component. A member stored without compression is read in place
+        (no copy; a remote IPSW is read by ranges); a compressed member is extracted to the cache first."""
+        name, size, _ = self.info(component)
+        entry = self.zip.getinfo(name)
+        if entry.compress_type != zipfile.ZIP_STORED:
+            return self.extract(component).open('rb')
+        self.stream.seek(entry.header_offset)
+        local = self.stream.read(30)
+        if local[:4] != b'PK\x03\x04':
+            raise Error(f'zip local header of {name} not found')
+        name_length, extra_length = struct.unpack('<HH', local[26:30])
+        return _Slice(self.stream, entry.header_offset + 30 + name_length + extra_length, size)
+
+
+class _Slice(io.RawIOBase):
+    """A window [start, start + size) of a seekable stream, as its own seekable file."""
+
+    def __init__(self, stream, start, size):
+        self.stream, self.start, self.size, self.position = stream, start, size, 0
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return True
+
+    def tell(self):
+        return self.position
+
+    def seek(self, offset, whence=0):
+        if whence == 0:
+            self.position = offset
+        elif whence == 1:
+            self.position += offset
+        else:
+            self.position = self.size + offset
+        self.position = max(0, min(self.position, self.size))
+        return self.position
+
+    def read(self, count=-1):
+        if count is None or count < 0 or count > self.size - self.position:
+            count = self.size - self.position
+        if count <= 0:
+            return b''
+        self.stream.seek(self.start + self.position)
+        data = self.stream.read(count)
+        self.position += len(data)
+        return data
+
+    def readinto(self, buffer):
+        data = self.read(len(buffer))
+        buffer[:len(data)] = data
+        return len(data)
+
 
 def _der(data, at):
     tag, length = data[at], data[at + 1]

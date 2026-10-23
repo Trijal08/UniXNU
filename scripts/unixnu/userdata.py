@@ -23,6 +23,8 @@ import struct
 import subprocess
 
 from .ipsw import Ipsw
+from .udif import open_image, UdifError
+import shutil
 from .util import Error, log, run, sha256_file, tool
 
 MIB = 1 << 20
@@ -55,7 +57,9 @@ def build(ctx, dry_run=False):
     spec = ctx.board.get('userdata')
     if not spec:
         raise Error('board.toml has no [userdata]')
-    tool('hdiutil', 'the disk images are attached with macOS hdiutil')
+    native = shutil.which('hdiutil') is not None
+    if not native:
+        log('userdata: no hdiutil here, the disk images are expanded by the UDIF/raw reader (scripts/unixnu/udif.py)')
     source = Ipsw(ctx)
     capacity = (spec['last_lba'] - spec['first_lba'] + 1) * spec.get('lba_bytes', 4096)
     if dry_run:
@@ -64,10 +68,21 @@ def build(ctx, dry_run=False):
             log(f'userdata: {window["name"]} would be extracted from {name} ({size >> 20} MiB)')
         log('userdata: dry run, nothing extracted or written')
         return None
-    sources = [(window['name'], source.extract(window['component'])) for window in spec['windows']]
+    if native:
+        sources = [(window['name'], source.extract(window['component'])) for window in spec['windows']]
+    else:
+        sources = [(window['name'], source.open_member(window['component'])) for window in spec['windows']]
     layout, cursor = [], MIB
+    images = {}
     for name, dmg in sources:
-        size = image_size(dmg)
+        if native:
+            size = image_size(dmg)
+        else:
+            try:
+                images[name] = open_image(dmg)
+            except UdifError as error:
+                raise Error(f'{name}: {error}') from None
+            size = images[name].size
         layout.append((name, cursor, size))
         cursor += (size + MIB - 1) // MIB * MIB
     total = cursor
@@ -75,13 +90,40 @@ def build(ctx, dry_run=False):
     if total > capacity:
         raise Error('the image is larger than the userdata partition')
     for name, dmg in sources:
-        log(f'userdata: {name} from {dmg.name}')
+        log(f'userdata: {name} from {getattr(dmg, "name", source.member([w for w in spec["windows"] if w["name"] == name][0]["component"]))}')
     out, image, report = paths(ctx)
     out.mkdir(parents=True, exist_ok=True)
     entries = []
     with image.open('wb') as target:
         target.truncate(total)
         for (name, offset, size), (_, dmg) in zip(layout, sources):
+            if not native:
+                digest = hashlib.sha256()
+                target.seek(offset)
+                written = 0
+
+                def sink(data, _digest=digest):
+                    nonlocal written
+                    _digest.update(data)
+                    target.write(data)
+                    written += len(data)
+
+                last = [0]
+
+                def progress(done, count, position):
+                    if position - last[0] >= 512 * MIB or done == count:
+                        last[0] = position
+                        log(f'userdata: {name} {position >> 20} / {size >> 20} MiB ({done}/{count} chunks)')
+
+                try:
+                    images[name].expand(sink, progress)
+                except UdifError as error:
+                    raise Error(f'{name}: {error}') from None
+                if written != size:
+                    raise Error(f'{name}: expanded {written} bytes, expected {size}')
+                entries.append((name, offset, size, digest.digest()))
+                log(f'userdata: {name} {size} bytes at {offset:#x} sha256 {digest.hexdigest()}')
+                continue
             device = attach(dmg)
             try:
                 raw = device.replace('/dev/disk', '/dev/rdisk')
@@ -111,7 +153,7 @@ def build(ctx, dry_run=False):
         target.write(header)
     data = {'image_bytes': total, 'image_sha256': sha256_file(image), 'manifest_sha256': hashlib.sha256(bytes(header)).hexdigest(),
             'windows': [{'name': n, 'offset': o, 'size': s, 'sha256': d.hex()} for n, o, s, d in entries],
-            'userdata_bytes': capacity, 'flash_command': f'fastboot flash userdata {image}',
+            'userdata_bytes': capacity, 'flash_command': f'fastboot flash {spec.get("partition", "userdata")} {image}',
             'source': 'remote' if source.remote else 'local', 'hardware_tested': False}
     report.write_text(json.dumps(data, indent=2) + '\n')
     log(f'userdata: {image}')
