@@ -76,10 +76,15 @@ if [ "$BOOT_PROGRESS" != 0 ] && [ "$BOOT_PROGRESS" != 1 ]; then
   exit 1
 fi
 if [ "$BOOT_PROGRESS" = 1 ]; then
-  if [ "${XNU_NATIVE_UFS:-0}" != 1 ] || [ "${XNU_OWNER_ROOT_AUDIT:-0}" != 1 ] || \
-     [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" != 1 ] || [ "${XNU_SOURCE_CORECRYPTO14:-0}" != 1 ]; then
-    echo 'Boot progress requires the audited UFS/owner-root, Virtio and source-corecrypto build' >&2
+  # The page reads the UFS and Virtio drivers' counters; those two are required. The owner-root audit and the
+  # source corecrypto are what the sheng page reports on, so a board that is still bringing its storage up may
+  # build the page without them (its root rows then stay empty).
+  if [ "${XNU_NATIVE_UFS:-0}" != 1 ] || [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" != 1 ]; then
+    echo 'Boot progress requires the native UFS and Virtio block drivers' >&2
     exit 1
+  fi
+  if [ "${XNU_OWNER_ROOT_AUDIT:-0}" != 1 ] || [ "${XNU_SOURCE_CORECRYPTO14:-0}" != 1 ]; then
+    echo 'boot progress: owner-root audit or source corecrypto off; the page reports storage bring-up only' >&2
   fi
   python3 scripts/build-boot-progress.py
 fi
