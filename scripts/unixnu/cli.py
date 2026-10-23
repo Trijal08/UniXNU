@@ -4,12 +4,12 @@ import platform
 import shutil
 import sys
 
-from . import bootimg, feeds, firmware, ipsw, kernel, package, payload, tree, userdata
+from . import bootimg, feeds, firmware, ipsw, kernel, package, payload, policies, tree, userdata
 from .config import LOCAL_KINDS, Context, parse_config
 from .util import Error, expand, git, log
 
 STEPS = ('kernel', 'package', 'firmware', 'payload')
-OPTIONAL_STEPS = ('userdata',)   # large; built only when named
+OPTIONAL_STEPS = ('userdata', 'policies')   # large or key-bearing; built only when named
 
 
 def common():
@@ -117,8 +117,11 @@ def cmd_build(ctx):
     if 'userdata' in steps:
         userdata.build(ctx, ctx.args.dry_run)
         steps = [step for step in steps if step != 'userdata']
-        if not steps:
-            return
+    if 'policies' in steps:
+        policies.build(ctx)
+        steps = [step for step in steps if step != 'policies']
+    if not steps:
+        return
     if 'kernel' in steps:
         ctx.need_config()
     if 'firmware' in steps:

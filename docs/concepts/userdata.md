@@ -33,7 +33,7 @@ The header occupies 4096 bytes and is zero padded to 1 MiB. The first window sta
 | `OS` | `OS` | The system volume |
 | `SystemOS` | `Cryptex1,SystemOS` | The cryptex system volume |
 
-The images are copied byte for byte from the disk images in the IPSW. The userdata step attaches each disk image read-only with `hdiutil` and reads the raw device.
+The images are copied byte for byte from the disk images in the IPSW. On macOS the userdata step attaches each disk image read-only with `hdiutil` and reads the raw device; on other hosts the UDIF reader expands the image (`scripts/unixnu/udif.py`), and a member that is already a raw APFS container (the SystemOS cryptex) is copied as it is. Both paths produce the same bytes and the same window hashes.
 
 ## Capacity
 
@@ -84,9 +84,13 @@ The persistent store serves the disk from a window at the end of the userdata pa
 | `manifest_sha256` | Manifest hash |
 | `windows` | Name, offset, size and hash of each window |
 | `userdata_bytes` | Partition capacity |
-| `flash_command` | `fastboot flash userdata <image>` |
+| `flash_command` | `fastboot flash <partition> <image>` (`[userdata] partition`, `userdata` by default) |
 | `source` | Local or remote IPSW |
 | `hardware_tested` | Qualification state |
+
+## Owner policies
+
+`unixnu build policies` signs each window with the owner key and verifies it with the kit's C provider (see [Integrity and boot policy](/concepts/security)). The verified block driver serves a read only when the block hashes to its entry in the policy whose signed size equals the window, and the kernel roots on the signed OS volume UUID.
 
 ## Next steps
 

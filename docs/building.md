@@ -28,7 +28,7 @@ The boot image is `out/<board>/boot/boot.img` with `out/<board>/boot/boot.json` 
 
 ## macOS runner
 
-The kernel, userdata and Data seed steps call Xcode, `hdiutil` and `diskutil`. A fork can run them on a GitHub macOS runner without a local Mac.
+The kernel step calls Xcode and the Data seed tools call `hdiutil` and `diskutil`; the userdata step uses `hdiutil` when it is there and the UDIF reader of `scripts/unixnu/udif.py` otherwise. A fork can run them on a GitHub macOS runner without a local Mac.
 
 1. Fork the repository and enable Actions.
 2. Add the repository secret `UNIXNU_UNIQUE_CHIP_ID` when the board requires a platform seed.
@@ -79,6 +79,7 @@ The workflow runs kernel, userdata and payload. Package, firmware and boot image
 | `ipsw fetch [COMPONENT...]` | Extracts the named components into `out/ipsw/<build>/`. |
 | `build [kernel] [package] [firmware] [payload] [prelink]` | Runs the named steps. The default is all four steps. `prelink` repeats the prelink alone. |
 | `build userdata [--dry-run]` | Builds the raw userdata image. This step is large and runs only when named. |
+| `build policies` | Signs the windows of the userdata image with the owner key and verifies them. Runs only when named. |
 | `bootimg` | Packs BootShim, the firmware volume, the device tree and the optional payload into an Android boot image. |
 | `status` | Prints the device, configuration and the origin of every module. |
 | `clean` | Removes the board output and keeps fetched sources. |
@@ -183,9 +184,13 @@ The kernel command line comes from `[payload] kernel_args`. An extra `--kernel-a
 
 ### userdata
 
-The userdata step builds the raw image for the `userdata` partition. It holds the unchanged `OS` and `SystemOS` disk images of the IPSW behind the `SHNGROOT` manifest. The disk images are attached read-only with `hdiutil`. The output is `out/<board>/userdata/userdata-root.img` with `userdata-root.json`.
+The userdata step builds the raw image for the root partition (`[userdata] partition`, `userdata` by default). It holds the unchanged `OS` and `SystemOS` disk images of the IPSW behind the `SHNGROOT` manifest. On macOS the disk images are attached read-only with `hdiutil`; elsewhere `scripts/unixnu/udif.py` expands the UDIF (raw, zlib, bzip2, lzma and lzfse chunks; lzfse needs `liblzfse` on the library path or `UNIXNU_LZFSE`) and copies a raw cryptex container as it is. The output is `out/<board>/userdata/userdata-root.img` with `userdata-root.json`.
 
-The report prints the `fastboot flash userdata` command.
+The report prints the `fastboot flash <partition>` command.
+
+### policies
+
+The policies step signs each window of the userdata image with the owner key (`kits/VerifiedRoot/tools/manifest.py`) and verifies every block with the kit's C provider built against the host OpenSSL. The owner key is generated on first use in `out/<board>/tree/build/verified-root-host/keys/` (RSA-3072, private key mode 0600) and never leaves the build tree. The OS window is signed for the volume of `[payload.adt] root_match_volume_uuid`, the SystemOS window for the one volume of its container; both are looked up in the image before signing. The policies land in `out/<board>/tree/build/verified-root-{os,systemos}/`, where `scripts/build-verified-root-probe.py` (a `[kernel] archives` entry) turns them into the archive a `CONFIG_XNU_VERIFIED_ROOT_PROBE=y` kernel links.
 
 ### bootimg
 
