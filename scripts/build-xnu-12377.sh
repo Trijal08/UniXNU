@@ -238,14 +238,15 @@ for archive in $EXTRA_LD_ARCHIVES; do
     echo "XNU_EXTRA_LD_ARCHIVES: $archive does not exist" >&2
     exit 1
   fi
-  EXTRA_LD_FLAGS="$EXTRA_LD_FLAGS -Wl,-force_load,$archive"
+  EXTRA_LD_FLAGS="$EXTRA_LD_FLAGS $archive"
 done
 if [ -n "$EXTRA_LD_ARCHIVES" ] || [ "$SOURCE_CRYPTO" = 1 ] || [ "$ARM_DT_PLATFORM" = 1 ] || [ "$ARMCPU" = 1 ] || [ "$NATIVE_DWC3_CONSOLE" = 1 ] || [ "$SOURCE_PTHREAD" = 1 ] || [ "$NATIVE_UFS_SM8350" = 1 ]; then
   # First produce the unlinked objects/filelist for collision discovery.
   # Bootstrap references are enabled only after the provider archive exists.
   rm -f "$OBJ/osfmk/DEVELOPMENT/prng_random.o" "$OBJ/pexpert/DEVELOPMENT/pe_init.o"
   rm -f "$OBJ/pexpert/DEVELOPMENT/pe_serial.o" "$OBJ/osfmk/DEVELOPMENT/rtclock.o"
-  build_kernel CFLAGS_EXTRA="$EXTRA_CFLAGS -UXNU_SOURCE_CORECRYPTO14 -UXNU_ARM_DT_PLATFORM -UXNU_ARMCPU -UXNU_NATIVE_DWC3_CONSOLE"
+  build_kernel CFLAGS_EXTRA="$EXTRA_CFLAGS -UXNU_SOURCE_CORECRYPTO14 -UXNU_ARM_DT_PLATFORM -UXNU_ARMCPU -UXNU_NATIVE_DWC3_CONSOLE" \
+    "LD_KERNEL_ARCHIVES=-L$FAKEROOT/usr/local/lib/kernel -lfirehose_kernel$EXTRA_LD_FLAGS"
   ARCHIVE_FLAGS="-L$FAKEROOT/usr/local/lib/kernel -lfirehose_kernel$EXTRA_LD_FLAGS"
   ARCHIVE_DEPENDENCIES="$EXTRA_LD_ARCHIVES"
   if [ "$SOURCE_CRYPTO" = 1 ]; then
@@ -286,7 +287,7 @@ if [ -n "$EXTRA_LD_ARCHIVES" ] || [ "$SOURCE_CRYPTO" = 1 ] || [ "$ARM_DT_PLATFOR
     python3 scripts/seal-source-crypto-kernel.py --static-if-defaults "$OBJ/mach.development.bcm2837.unstripped.noctf"
   fi
 else
-  build_kernel
+  build_kernel "LD_KERNEL_ARCHIVES=-L$FAKEROOT/usr/local/lib/kernel -lfirehose_kernel$EXTRA_LD_FLAGS"
 fi
 # The iPhoneOS kernel is mach.development.bcm2837[.unstripped[.noctf]] in the object directory; ios-sym may not exist.
 for directory in "$OUT/ios-sym" "$OBJ"; do
