@@ -228,14 +228,26 @@ make ${MAKE_KEEP_GOING[@]+"${MAKE_KEEP_GOING[@]}"} -C "$WORK" "${XNU_BUILD_TARGE
   CFLAGS_EXTRA="$EXTRA_CFLAGS" "${EXTRA_MAKE_ARGS[@]}" "$@" \
   OBJROOT="$OUT/ios-obj" SYMROOT="$OUT/ios-sym" DSTROOT="$OUT/ios-dst"
 }
-if [ "$SOURCE_CRYPTO" = 1 ] || [ "$ARM_DT_PLATFORM" = 1 ] || [ "$ARMCPU" = 1 ] || [ "$NATIVE_DWC3_CONSOLE" = 1 ] || [ "$SOURCE_PTHREAD" = 1 ] || [ "$NATIVE_UFS_SM8350" = 1 ]; then
+# XNU_EXTRA_LD_ARCHIVES: space-separated archives force-loaded into the kernel link, for the board's
+# own link stubs (CONFIG_XNU_EXTRA_LD_ARCHIVES). A non-empty value also enables the archive link path,
+# so a board that needs only stubs does not have to turn on an unrelated provider to get one.
+EXTRA_LD_ARCHIVES=${XNU_EXTRA_LD_ARCHIVES:-}
+EXTRA_LD_FLAGS=""
+for archive in $EXTRA_LD_ARCHIVES; do
+  if [ ! -f "$archive" ]; then
+    echo "XNU_EXTRA_LD_ARCHIVES: $archive does not exist" >&2
+    exit 1
+  fi
+  EXTRA_LD_FLAGS="$EXTRA_LD_FLAGS -Wl,-force_load,$archive"
+done
+if [ -n "$EXTRA_LD_ARCHIVES" ] || [ "$SOURCE_CRYPTO" = 1 ] || [ "$ARM_DT_PLATFORM" = 1 ] || [ "$ARMCPU" = 1 ] || [ "$NATIVE_DWC3_CONSOLE" = 1 ] || [ "$SOURCE_PTHREAD" = 1 ] || [ "$NATIVE_UFS_SM8350" = 1 ]; then
   # First produce the unlinked objects/filelist for collision discovery.
   # Bootstrap references are enabled only after the provider archive exists.
   rm -f "$OBJ/osfmk/DEVELOPMENT/prng_random.o" "$OBJ/pexpert/DEVELOPMENT/pe_init.o"
   rm -f "$OBJ/pexpert/DEVELOPMENT/pe_serial.o" "$OBJ/osfmk/DEVELOPMENT/rtclock.o"
   build_kernel CFLAGS_EXTRA="$EXTRA_CFLAGS -UXNU_SOURCE_CORECRYPTO14 -UXNU_ARM_DT_PLATFORM -UXNU_ARMCPU -UXNU_NATIVE_DWC3_CONSOLE"
-  ARCHIVE_FLAGS="-L$FAKEROOT/usr/local/lib/kernel -lfirehose_kernel"
-  ARCHIVE_DEPENDENCIES=""
+  ARCHIVE_FLAGS="-L$FAKEROOT/usr/local/lib/kernel -lfirehose_kernel$EXTRA_LD_FLAGS"
+  ARCHIVE_DEPENDENCIES="$EXTRA_LD_ARCHIVES"
   if [ "$SOURCE_CRYPTO" = 1 ]; then
     python3 scripts/build-corecrypto-14.py --xnu-12377
     python3 scripts/build-corecrypto-14.py --xnu-12377 --namespace
