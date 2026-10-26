@@ -15,3 +15,45 @@ diff --git a/pexpert/pexpert/arm64/BCM2837.h b/pexpert/pexpert/arm64/BCM2837.h
  #endif
  
  #ifndef ASSEMBLER
+diff --git a/libkern/os/base.h b/libkern/os/base.h
+--- a/libkern/os/base.h
++++ b/libkern/os/base.h
+@@ -355,7 +355,17 @@
+ #if __has_feature(ptrauth_calls)
+ #include <ptrauth.h>
+ #define OS_PTRAUTH_SIGNED_PTR(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type))
++#if defined(XNU_ARCH_PAC) && XNU_ARCH_PAC
++/* Upstream clang takes 1 to 3 arguments for __ptrauth; the 4-argument form with an
++ * authentication mode is an Apple-clang extension. "authenticates-null-values" is what lets a
++ * signed field hold NULL without the auth trapping, and the only field that uses it is
++ * ucred.cr_label, a MAC label that is routinely NULL. Dropping just the 4th argument would keep
++ * the signing and then trap on those NULLs, so the field is left unsigned instead: one pointer
++ * loses hardening, and nothing mis-authenticates. */
++#define OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type)
++#else
+ #define OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type), "authenticates-null-values")
++#endif
+ #define OS_PTRAUTH_DISCRIMINATOR(str) ptrauth_string_discriminator(str)
+ #define __ptrauth_only
+ #else //  __has_feature(ptrauth_calls)
+diff --git a/iokit/IOKit/IOCircularDataQueueImplementation.h b/iokit/IOKit/IOCircularDataQueueImplementation.h
+--- a/iokit/IOKit/IOCircularDataQueueImplementation.h
++++ b/iokit/IOKit/IOCircularDataQueueImplementation.h
+@@ -306,7 +306,17 @@
+ #if __has_feature(ptrauth_calls)
+ #include <ptrauth.h>
+ #define OS_PTRAUTH_SIGNED_PTR(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type))
++#if defined(XNU_ARCH_PAC) && XNU_ARCH_PAC
++/* Upstream clang takes 1 to 3 arguments for __ptrauth; the 4-argument form with an
++ * authentication mode is an Apple-clang extension. "authenticates-null-values" is what lets a
++ * signed field hold NULL without the auth trapping, and the only field that uses it is
++ * ucred.cr_label, a MAC label that is routinely NULL. Dropping just the 4th argument would keep
++ * the signing and then trap on those NULLs, so the field is left unsigned instead: one pointer
++ * loses hardening, and nothing mis-authenticates. */
++#define OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type)
++#else
+ #define OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type), "authenticates-null-values")
++#endif
+ #define OS_PTRAUTH_DISCRIMINATOR(str) ptrauth_string_discriminator(str)
+ #define __ptrauth_only
+ #else //  __has_feature(ptrauth_calls)
