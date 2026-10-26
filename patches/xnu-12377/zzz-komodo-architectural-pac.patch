@@ -1,0 +1,17 @@
+diff --git a/pexpert/pexpert/arm64/BCM2837.h b/pexpert/pexpert/arm64/BCM2837.h
+--- a/pexpert/pexpert/arm64/BCM2837.h
++++ b/pexpert/pexpert/arm64/BCM2837.h
+@@ -22,6 +22,13 @@
+ /* Explicit native ARMv8.1+ bring-up; the original A53 target has no PAN. */
+ #if defined(XNU_NATIVE_PAN) && XNU_NATIVE_PAN
+ #define __ARM_PAN_AVAILABLE__      1
++
++/* Architectural pointer authentication (FEAT_PAuth), for an arm64e userland on a standard ARMv8.3+
++ * core. HAS_APPLE_PAC turns on XNU's PAC machinery; the key programming itself is architectural and
++ * lives in pac_asm.h under XNU_ARCH_PAC rather than going through Apple's or a hypervisor's path. */
++#if defined(XNU_ARCH_PAC) && XNU_ARCH_PAC
++#define HAS_APPLE_PAC             1
++#endif
+ #endif
+ 
+ #ifndef ASSEMBLER

@@ -20,6 +20,11 @@ KDK_URL=${UNIXNU_KDK_URL:-https://github.com/dortania/KdkSupportPkg/releases/dow
 KDK_SHA256=${UNIXNU_KDK_SHA256:-faef4393becf65c88a2791770904909babf1826d23d2ea478bf878a6417851ab}
 IOS_MIN=${XNU_IOS_DEPLOYMENT_TARGET:-26.0}
 JOBS=${JOBS:-4}
+# XNU_KERNEL_ARCH: arm64 (default, no pointer signing in the kernel) or arm64e. It is a make
+# command-line assignment, which overrides the environment, so it has to be threaded through here.
+# arm64e is what turns on __has_feature(ptrauth_calls), and XNU compiles its arm64e userland
+# support (shared-region JOP keys, the arm64e pager) only under that feature.
+XNU_KERNEL_ARCH=${XNU_KERNEL_ARCH:-arm64}
 
 WORK=.cache/xnu-$XNU_VERSION-work
 FAKEROOT=$ROOT/.cache/xnu-$XNU_VERSION-fakeroot
@@ -219,7 +224,7 @@ fi
 build_kernel() {
 make ${MAKE_KEEP_GOING[@]+"${MAKE_KEEP_GOING[@]}"} -C "$WORK" "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iphoneos}" KDKROOT="$KDKROOT" \
   ARCH_CONFIGS=ARM64 MACHINE_CONFIGS=BCM2837 KERNEL_CONFIGS=DEVELOPMENT \
-  ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY \
+  ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG="${XNU_KERNEL_ARCH:-arm64}" LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY \
   ARM64_LINK_ADDR=0xfffffff007004000 ARM64_PLKSEG_ADDR=0xfffffff004004000 \
   DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=$IOS_MIN -DXNU_TARGET_OS_IOS" \
   DEPLOYMENT_LINKER_FLAGS="-Wl,-ios_version_min,$IOS_MIN" \
