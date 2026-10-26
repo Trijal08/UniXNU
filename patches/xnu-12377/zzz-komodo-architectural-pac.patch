@@ -1,59 +1,58 @@
 diff --git a/pexpert/pexpert/arm64/BCM2837.h b/pexpert/pexpert/arm64/BCM2837.h
 --- a/pexpert/pexpert/arm64/BCM2837.h
 +++ b/pexpert/pexpert/arm64/BCM2837.h
-@@ -22,6 +22,13 @@
- /* Explicit native ARMv8.1+ bring-up; the original A53 target has no PAN. */
- #if defined(XNU_NATIVE_PAN) && XNU_NATIVE_PAN
- #define __ARM_PAN_AVAILABLE__      1
+@@ -18,6 +18,16 @@
+ #define __ARM_COHERENT_CACHE__    1
+ #define __ARM_DEBUG__             7
+ #define __ARM64_PMAP_SUBPAGE_L1__ 1
 +
-+/* Architectural pointer authentication (FEAT_PAuth), for an arm64e userland on a standard ARMv8.3+
-+ * core. HAS_APPLE_PAC turns on XNU's PAC machinery; the key programming itself is architectural and
-+ * lives in pac_asm.h under XNU_ARCH_PAC rather than going through Apple's or a hypervisor's path. */
++/* Architectural pointer authentication (FEAT_PAuth) for an arm64e userland on a standard ARMv8.3+
++ * core such as Cortex-X4. Deliberately outside the XNU_NATIVE_PAN block: this has to be visible to
++ * the assembler as well, and XNU_ARCH_PAC reaches it through OTHER_CFLAGS, which feeds both
++ * CFLAGS_GEN and SFLAGS_GEN. It cannot be keyed off __has_feature(ptrauth_calls) because the
++ * assembler's preprocessing stage runs without -arch. */
 +#if defined(XNU_ARCH_PAC) && XNU_ARCH_PAC
 +#define HAS_APPLE_PAC             1
 +#endif
- #endif
++
  
- #ifndef ASSEMBLER
+ /* Explicit native ARMv8.1+ bring-up; the original A53 target has no PAN. */
+ #if defined(XNU_NATIVE_PAN) && XNU_NATIVE_PAN
 diff --git a/libkern/os/base.h b/libkern/os/base.h
 --- a/libkern/os/base.h
 +++ b/libkern/os/base.h
-@@ -355,7 +355,17 @@
+@@ -355,7 +355,14 @@
  #if __has_feature(ptrauth_calls)
  #include <ptrauth.h>
  #define OS_PTRAUTH_SIGNED_PTR(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type))
-+#if defined(XNU_ARCH_PAC) && XNU_ARCH_PAC
-+/* Upstream clang takes 1 to 3 arguments for __ptrauth; the 4-argument form with an
-+ * authentication mode is an Apple-clang extension. "authenticates-null-values" is what lets a
-+ * signed field hold NULL without the auth trapping, and the only field that uses it is
-+ * ucred.cr_label, a MAC label that is routinely NULL. Dropping just the 4th argument would keep
-+ * the signing and then trap on those NULLs, so the field is left unsigned instead: one pointer
-+ * loses hardening, and nothing mis-authenticates. */
+-#define OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type), "authenticates-null-values")
++/* Upstream clang takes 1 to 3 arguments for __ptrauth; the 4-argument form carrying an
++ * authentication mode is an Apple-clang extension. Unconditional rather than tied to a build
++ * option, because the exported Kernel.framework headers are compiled by libfirehose, libpthread and
++ * the drivers, none of which define one. "authenticates-null-values" is what lets a signed field
++ * hold NULL without the authentication trapping, and the only field using it is ucred.cr_label, a
++ * MAC label that is routinely NULL. Dropping just the 4th argument would keep the signing and then
++ * trap on those NULLs, so the field is left unsigned instead. */
 +#define OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type)
-+#else
- #define OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type), "authenticates-null-values")
-+#endif
  #define OS_PTRAUTH_DISCRIMINATOR(str) ptrauth_string_discriminator(str)
  #define __ptrauth_only
  #else //  __has_feature(ptrauth_calls)
 diff --git a/iokit/IOKit/IOCircularDataQueueImplementation.h b/iokit/IOKit/IOCircularDataQueueImplementation.h
 --- a/iokit/IOKit/IOCircularDataQueueImplementation.h
 +++ b/iokit/IOKit/IOCircularDataQueueImplementation.h
-@@ -306,7 +306,17 @@
+@@ -306,7 +306,14 @@
  #if __has_feature(ptrauth_calls)
  #include <ptrauth.h>
  #define OS_PTRAUTH_SIGNED_PTR(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type))
-+#if defined(XNU_ARCH_PAC) && XNU_ARCH_PAC
-+/* Upstream clang takes 1 to 3 arguments for __ptrauth; the 4-argument form with an
-+ * authentication mode is an Apple-clang extension. "authenticates-null-values" is what lets a
-+ * signed field hold NULL without the auth trapping, and the only field that uses it is
-+ * ucred.cr_label, a MAC label that is routinely NULL. Dropping just the 4th argument would keep
-+ * the signing and then trap on those NULLs, so the field is left unsigned instead: one pointer
-+ * loses hardening, and nothing mis-authenticates. */
+-#define OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type), "authenticates-null-values")
++/* Upstream clang takes 1 to 3 arguments for __ptrauth; the 4-argument form carrying an
++ * authentication mode is an Apple-clang extension. Unconditional rather than tied to a build
++ * option, because the exported Kernel.framework headers are compiled by libfirehose, libpthread and
++ * the drivers, none of which define one. "authenticates-null-values" is what lets a signed field
++ * hold NULL without the authentication trapping, and the only field using it is ucred.cr_label, a
++ * MAC label that is routinely NULL. Dropping just the 4th argument would keep the signing and then
++ * trap on those NULLs, so the field is left unsigned instead. */
 +#define OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type)
-+#else
- #define OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type), "authenticates-null-values")
-+#endif
  #define OS_PTRAUTH_DISCRIMINATOR(str) ptrauth_string_discriminator(str)
  #define __ptrauth_only
  #else //  __has_feature(ptrauth_calls)

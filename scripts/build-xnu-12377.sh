@@ -25,6 +25,10 @@ JOBS=${JOBS:-4}
 # arm64e is what turns on __has_feature(ptrauth_calls), and XNU compiles its arm64e userland
 # support (shared-region JOP keys, the arm64e pager) only under that feature.
 XNU_KERNEL_ARCH=${XNU_KERNEL_ARCH:-arm64}
+PAC_DEFINE=""
+if [ "$XNU_KERNEL_ARCH" = arm64e ]; then
+  PAC_DEFINE="-DXNU_ARCH_PAC=1"
+fi
 
 WORK=.cache/xnu-$XNU_VERSION-work
 FAKEROOT=$ROOT/.cache/xnu-$XNU_VERSION-fakeroot
@@ -124,7 +128,7 @@ if p.read_text() != s:
 PY
   xcodebuild install -project ".cache/libdispatch-$LIBDISPATCH_TAG-work/libdispatch.xcodeproj" \
     -target libfirehose_kernel -configuration Release -sdk iphoneos -jobs "$JOBS" \
-    ARCHS=arm64 VALID_ARCHS=arm64 ONLY_ACTIVE_ARCH=NO IPHONEOS_DEPLOYMENT_TARGET="$IOS_MIN" \
+    ARCHS="$XNU_KERNEL_ARCH" VALID_ARCHS="$XNU_KERNEL_ARCH" ONLY_ACTIVE_ARCH=NO IPHONEOS_DEPLOYMENT_TARGET="$IOS_MIN" \
     CODE_SIGNING_ALLOWED=NO GCC_TREAT_WARNINGS_AS_ERRORS=NO \
     OBJROOT="$OUT/firehose/obj" SYMROOT="$OUT/firehose/sym" \
     DSTROOT="$FAKEROOT" FAKEROOT_DIR="$FAKEROOT" XNU_SOURCE="$ROOT/$WORK"
@@ -225,6 +229,7 @@ build_kernel() {
 make ${MAKE_KEEP_GOING[@]+"${MAKE_KEEP_GOING[@]}"} -C "$WORK" "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iphoneos}" KDKROOT="$KDKROOT" \
   ARCH_CONFIGS=ARM64 MACHINE_CONFIGS=BCM2837 KERNEL_CONFIGS=DEVELOPMENT \
   ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG="${XNU_KERNEL_ARCH:-arm64}" LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY \
+  OTHER_CFLAGS="$PAC_DEFINE" \
   ARM64_LINK_ADDR=0xfffffff007004000 ARM64_PLKSEG_ADDR=0xfffffff004004000 \
   DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=$IOS_MIN -DXNU_TARGET_OS_IOS" \
   DEPLOYMENT_LINKER_FLAGS="-Wl,-ios_version_min,$IOS_MIN" \
