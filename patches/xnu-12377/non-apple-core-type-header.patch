@@ -1,0 +1,14 @@
+diff --git a/pexpert/pexpert/arm64/apple_arm64_cpu.h b/pexpert/pexpert/arm64/apple_arm64_cpu.h
+index e462ede..2138af0 100644
+--- a/pexpert/pexpert/arm64/apple_arm64_cpu.h
++++ b/pexpert/pexpert/arm64/apple_arm64_cpu.h
+@@ -28,6 +28,9 @@
+ 
+ #pragma once
+ 
++/* MPIDR_CORETYPE_*, which apple_arm64_common.h includes first on Apple boards only. */
++#include <pexpert/arm64/apple_arm64_regs.h>
++
+ #if !defined(__ASSEMBLER__)
+ 
+ #include <stdbool.h>

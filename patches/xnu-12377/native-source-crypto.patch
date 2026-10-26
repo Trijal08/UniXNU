@@ -1,0 +1,79 @@
+diff --git a/pexpert/arm/pe_init.c b/pexpert/arm/pe_init.c
+--- a/pexpert/arm/pe_init.c
++++ b/pexpert/arm/pe_init.c
+@@ -411,6 +411,10 @@
+ 	}
+ 
+ 	InitIOKit(PE_state.deviceTreeHead);
++#if defined(XNU_SOURCE_CORECRYPTO14) && XNU_SOURCE_CORECRYPTO14
++	extern void source_corecrypto14_bootstrap(void);
++	source_corecrypto14_bootstrap();
++#endif
+ 	ConfigureIOKit();
+ }
+ 
+diff --git a/osfmk/prng/prng_random.c b/osfmk/prng/prng_random.c
+--- a/osfmk/prng/prng_random.c
++++ b/osfmk/prng/prng_random.c
+@@ -502,3 +502,61 @@
+ 	}
+ 	return rbits;
+ }
++
++/* A built-in source provider must precede platform UUID hashing. */
++#if defined(XNU_SOURCE_CORECRYPTO14) && XNU_SOURCE_CORECRYPTO14
++#include <mach/kmod.h>
++#include <mach-o/loader.h>
++#include <libkern/crypto/crypto_internal.h>
++extern struct mach_header_64 _mh_execute_header;
++extern kern_return_t corecrypto_kext_start(kmod_info_t *, void *);
++SECURITY_READ_ONLY_LATE(kern_return_t) source_corecrypto14_status = KERN_FAILURE;
++
++void
++source_corecrypto14_bootstrap(void)
++{
++    static kmod_info_t info = {
++        .info_version = KMOD_INFO_VERSION,
++        .name = "source-corecrypto14-xnu12377",
++        .version = "14.0",
++    };
++    static const uint8_t sha1_abc[20] = {
++        0xa9,0x99,0x3e,0x36,0x47,0x06,0x81,0x6a,0xba,0x3e,
++        0x25,0x71,0x78,0x50,0xc2,0x6c,0x9c,0xd0,0xd8,0x9d
++    };
++    static const uint8_t hmac_sha256[32] = {
++        0xb0,0x34,0x4c,0x61,0xd8,0xdb,0x38,0x53,0x5c,0xa8,0xaf,0xce,0xaf,0x0b,0xf1,0x2b,
++        0x88,0x1d,0xc2,0x00,0xc9,0x83,0x3d,0xa7,0x26,0xe9,0x37,0x6c,0x2e,0x32,0xcf,0xf7
++    };
++    uint8_t digest[32], key[20];
++    uint32_t mode = 0;
++    if (PE_parse_boot_argn("fips_mode", &mode, sizeof(mode)) && mode != 0) {
++        panic("source crypto requires default complete POST");
++    }
++    info.address = (vm_address_t)&_mh_execute_header;
++    source_corecrypto14_status = corecrypto_kext_start(&info, NULL);
++    if (source_corecrypto14_status != KERN_SUCCESS || g_crypto_funcs == NULL) {
++        panic("source crypto initialization failed: %d", source_corecrypto14_status);
++    }
++    /* Exercise the new KPI suffix through the kernel's actual table layout. */
++    g_crypto_funcs->digest_fn(CRYPTO_DIGEST_ALG_SHA1, "abc", 3, digest, sizeof(sha1_abc));
++    if (memcmp(digest, sha1_abc, sizeof(sha1_abc)) != 0) {
++        panic("source crypto digest KPI test failed");
++    }
++    memset(key, 0x0b, sizeof(key));
++    g_crypto_funcs->hmac_generate_fn(CRYPTO_DIGEST_ALG_SHA256, key, sizeof(key),
++        "Hi There", 8, digest, sizeof(digest));
++    if (memcmp(digest, hmac_sha256, sizeof(digest)) != 0 ||
++        !g_crypto_funcs->hmac_verify_fn(CRYPTO_DIGEST_ALG_SHA256, key, sizeof(key),
++        "Hi There", 8, digest, sizeof(digest))) {
++        panic("source crypto HMAC KPI test failed");
++    }
++    digest[0] ^= 1;
++    if (g_crypto_funcs->hmac_verify_fn(CRYPTO_DIGEST_ALG_SHA256, key, sizeof(key),
++        "Hi There", 8, digest, sizeof(digest))) {
++        panic("source crypto accepted incorrect HMAC");
++    }
++    cc_clear(sizeof(digest), digest);
++    cc_clear(sizeof(key), key);
++}
++#endif

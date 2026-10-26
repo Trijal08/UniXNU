@@ -1,0 +1,35 @@
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -36,3 +36,31 @@
++#if XNU_NATIVE_UFS_SM8350
++    "   {"
++    "     'IOClass' = NativeUfs;"
++    "     'IOMatchCategory' = NativeUfsRoot;"
++    "     'IOProviderClass' = IOPlatformExpertDevice;"
++    "     'IOProbeScore' = 500:32;"
++    "   },"
++    "   {"
++    "     'IOClass' = IOBlockStorageDriver;"
++    "     'IOProviderClass' = IOBlockStorageDevice;"
++    "     'IOPropertyMatch' = { 'device-type' = Generic; };"
++    "   },"
++    "   {"
++    "     'IOClass' = IOGUIDPartitionScheme;"
++    "     'IOProviderClass' = IOMedia;"
++    "     'IOMatchCategory' = IOStorage;"
++    "     'IOProbeScore' = 4000:32;"
++    "     'Content Mask' = 'GUID_partition_scheme';"
++    "     'IOPropertyMatch' = { Whole = .true.; };"
++    "   },"
++    "   {"
++    "     'IOClass' = IOMediaBSDClient;"
++    "     'IOProviderClass' = IOMedia;"
++    "     'IOMatchCategory' = IOMediaBSDClient;"
++    "     'IOProbeScore' = 30000:32;"
++    "     'IOResourceMatch' = IOBSD;"
++    "   },"
++#endif
+     "   {"
+     "     'IOClass'         = IOPanicPlatform;"
+     "     'IOProviderClass' = IOPlatformExpertDevice;"

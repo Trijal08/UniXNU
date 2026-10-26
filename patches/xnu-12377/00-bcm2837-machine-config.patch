@@ -1,0 +1,343 @@
+diff --git a/config/MASTER.arm64.bcm2837 b/config/MASTER.arm64.bcm2837
+new file mode 100644
+index 0000000..d6000b6
+--- /dev/null
++++ b/config/MASTER.arm64.bcm2837
+@@ -0,0 +1,129 @@
++#
++# Mach Operating System
++# Copyright (c) 1986 Carnegie-Mellon University
++# Copyright 2001-2024 Apple Inc.
++#
++# All rights reserved.  The CMU software License Agreement
++# specifies the terms and conditions for use and redistribution.
++#
++######################################################################
++#
++#  Master Apple configuration file (see the master machine independent
++#  configuration file for a description of the file format).
++#
++#  BCM2837 (non-Apple ARMv8 SoC) configuration: MASTER.arm64.iPhoneOS of
++#  this release without the Apple CPU counters (Apple PMU registers) and
++#  without paravirtualization. It keeps the PPL-era pmap (config_pmap_ppl);
++#  doconf is never given -sptm or -exclaves for this SoC.
++#
++######################################################################
++#
++#  Standard Apple OS Configurations:
++#  -------- ----- -- ---------------
++#
++#  ARM_EXTRAS_BASE = [ config_pmap_ppl ]
++#  KERNEL_BASE =    [ arm64 xsmall msgb_small config_embedded config_enforce_signed_code config_code_signature_reconstitution config_requires_u32_munging config_darkboot ARM_EXTRAS_BASE ]
++#  KERNEL_RELEASE = [ KERNEL_BASE release ]
++#  KERNEL_DEV =     [ KERNEL_BASE development mach_assert config_xnupost proc_ref_debug config_proc_resource_limits config_ext_paniclog ]
++#  KERNEL_DEBUG =   [ KERNEL_BASE debug mach_assert config_xnupost config_waitq_stats config_workloop_debug config_proc_resource_limits config_ext_paniclog ]
++#  BSD_EXTRAS_BASE = [ ]
++#  BSD_EXTRAS_DEV = [ config_coredump config_ucoredump ]
++#  BSD_EXTRAS_DEBUG = [ config_coredump config_ucoredump ]
++#  BSD_BASE =       [ mach_bsd psynch config_proc_uuid_policy config_personas config_imageboot config_imageboot_img4 BSD_EXTRAS_BASE ]
++#  BSD_RELEASE =    [ BSD_BASE no_printf_str no_kprintf_str secure_kernel config_imgsrc_access ]
++#  BSD_DEV =        [ BSD_BASE config_netboot config_imgsrc_access pgo config_vnguard rosetta BSD_EXTRAS_DEV ]
++#  BSD_DEBUG =      [ BSD_BASE config_netboot config_imgsrc_access pgo config_vnguard rosetta BSD_EXTRAS_DEBUG ]
++#  FILESYS_BASE =   [ devfs fifo fs_compression config_protect config_mnt_rootsnap config_triggers config_fse routefs namedstreams config_dataless_files bindfs]
++#  FILESYS_RELEASE= [ FILESYS_BASE ]
++#  FILESYS_DEV =    [ FILESYS_BASE fdesc config_union_mounts ]
++#  FILESYS_DEBUG =  [ FILESYS_BASE fdesc config_union_mounts ]
++#  SKYWALK_BASE =   [ skywalk config_nexus_user_pipe config_nexus_kernel_pipe config_nexus_flowswitch config_nexus_netif ]
++#  SKYWALK_RELEASE = [ SKYWALK_BASE ]
++#  SKYWALK_DEV =    [ SKYWALK_BASE ]
++#  SKYWALK_DEBUG =  [ SKYWALK_BASE ]
++#  NETWORKING =     [ inet tcpdrop_synfin bpfilter if_bridge traffic_mgt dummynet ah_all_crypto if_fake if_redirect vlan ]
++#  NETWORKING_RELEASE = [ NETWORKING ]
++#  NETWORKING_DEV = [ NETWORKING_RELEASE packet_mangler if_headless kctl_test ]
++#  NETWORKING_DEBUG = [ NETWORKING_DEV ]
++#  VPN =            [ ipsec flow_divert necp content_filter ]
++#  PF_RELEASE =     [ pf pflog ]
++#  PF_DEV =         [ PF_RELEASE ]
++#  PF_DEBUG =       [ PF_DEV ]
++#  MULTIPATH =      [ multipath mptcp ]
++#  IOKIT_BASE =     [ iokit iokitcpp no_kernel_hid config_sleep ]
++#  IOKIT_RELEASE =  [ IOKIT_BASE ]
++#  IOKIT_DEV =      [ IOKIT_BASE iokitstats iotracking ]
++#  IOKIT_DEBUG =    [ IOKIT_BASE iokitstats iotracking]
++#  LIBKERN_BASE =   [ libkerncpp config_blocks config_kec_fips zlib crypto_sha2 config_img4 ]
++#  LIBKERN_RELEASE =[ LIBKERN_BASE ]
++#  LIBKERN_DEV =    [ LIBKERN_BASE iotracking ]
++#  LIBKERN_DEBUG =  [ LIBKERN_BASE iotracking ]
++
++#  CPU_COUNTERS_BASE = [ ]
++#  PERF_EXTRAS_BASE = [ ]
++#  PERF_EXTRAS_DEV = [ kdp_interactive_debugging config_kdp_coredump_encryption ]
++#  PERF_EXTRAS_DEBUG = [ kdp_interactive_debugging config_kdp_coredump_encryption ]
++
++#  PERF_DBG_BASE =  [ mach_kdp config_serial_kdp CPU_COUNTERS_BASE kperf PERF_EXTRAS_BASE ]
++#  PERF_DBG_RELEASE=[ PERF_DBG_BASE ist_kdebug ]
++#  PERF_DBG_DEV =   [ PERF_DBG_BASE config_dtrace lock_stats zleaks alternate_debugger sched_hygiene_debug config_debug_syscall_rejection config_iotrace PERF_EXTRAS_DEV config_memory_microstackshot ]
++#  PERF_DBG_DEBUG = [ PERF_DBG_BASE config_dtrace lock_stats zleaks alternate_debugger sched_hygiene_debug config_debug_syscall_rejection config_iotrace PERF_EXTRAS_DEBUG config_memory_microstackshot ]
++#  PERF_DBG_KASAN = [ PERF_DBG_BASE config_dtrace lock_stats zleaks alternate_debugger config_debug_syscall_rejection config_iotrace PERF_EXTRAS_DEV config_memory_microstackshot ]
++#  PARAVIRT_BASE =  [ ]
++#  MACH_BASE =      [ mach config_ecc_logging vc_progress_white importance_inheritance config_atm config_coalitions config_iosched config_library_validation config_sysdiagnose config_telemetry config_mach_bridge_recv_time config_quiesce_counter config_io_compression_stats phys_write_acct config_service_port_info PARAVIRT_BASE ]
++#  MACH_RELEASE =   [ MACH_BASE config_skip_precise_user_kernel_time debugger_for_zone_info ]
++#  MACH_DEV =       [ MACH_BASE config_io_accounting importance_trace config_task_suspend_stats ]
++#  MACH_DEBUG =     [ MACH_BASE config_io_accounting importance_trace importance_debug config_task_suspend_stats ]
++#  SCHED_BASE =     [ config_sched_timeshare_core config_sched_deferred_ast config_clutch config_sched_sfi config_taskwatch config_preadopt_tg ]
++#  SCHED_RELEASE =  [ SCHED_BASE ]
++#  SCHED_DEV =      [ SCHED_BASE ]
++#  SCHED_DEBUG =    [ SCHED_BASE ]
++#if MASTER_CONFIG_ENABLE_KERNEL_TAG && MASTER_CONFIG_ENABLE_SPTM
++#  VM_EXTRA =       [ kernel_tagging ]
++#  VM_EXTRA_DEV =   [ ]
++#elif MASTER_CONFIG_ENABLE_SPTM
++#  VM_EXTRA =       [ ]
++#  VM_EXTRA_DEV =   [ ]
++#else
++#  VM_EXTRA =       [ ]
++#  VM_EXTRA_DEV =   [ ]
++#endif /* MASTER_CONFIG_ENABLE_KERNEL_TAG && MASTER_CONFIG_ENABLE_SPTM */
++#  VM_BASE =        [ vps_dynamic_prio vm_pressure_events jetsam freeze memorystatus config_code_decryption phantom_cache config_secluded_memory config_cs_validation_bitmap config_deferred_reclaim config_map_ranges VM_EXTRA ]
++#  VM_RELEASE =     [ VM_BASE ]
++#  VM_DEV =         [ VM_BASE dynamic_codesigning ubsan_minimal VM_EXTRA_DEV ]
++#  VM_DEBUG =       [ VM_BASE dynamic_codesigning ubsan_minimal VM_EXTRA_DEV ]
++#  VM_KASAN =       [ VM_BASE dynamic_codesigning config_kasan config_ubsan config_kcov config_ksancov kernel_tagging kernel_tbi]
++#  SECURITY_BASE =    [ config_macf kernel_integrity config_secure_bsd_root reslide_shared_cache ]
++#  SECURITY_RELEASE = [ SECURITY_BASE ]
++#  SECURITY_DEV =     [ SECURITY_BASE config_setuid config_kas_info ]
++#  SECURITY_DEBUG =   [ SECURITY_BASE config_setuid config_kas_info ]
++#  BASE =           [ MULTIPATH VPN ]
++#  RELEASE =        [ BASE KERNEL_RELEASE BSD_RELEASE FILESYS_RELEASE             SKYWALK_RELEASE NETWORKING_RELEASE PF_RELEASE IOKIT_RELEASE LIBKERN_RELEASE PERF_DBG_RELEASE MACH_RELEASE SCHED_RELEASE VM_RELEASE SECURITY_RELEASE ]
++#  DEVELOPMENT =    [ BASE KERNEL_DEV     BSD_DEV     FILESYS_DEV     SKYWALK_DEV     NETWORKING_DEV     PF_DEV     IOKIT_DEV     LIBKERN_DEV     PERF_DBG_DEV     MACH_DEV     SCHED_DEV     VM_DEV     SECURITY_DEV     ]
++#  DEBUG =          [ BASE KERNEL_DEBUG   BSD_DEBUG   FILESYS_DEBUG   SKYWALK_DEBUG   NETWORKING_DEBUG   PF_DEBUG   IOKIT_DEBUG   LIBKERN_DEBUG   PERF_DBG_DEBUG   MACH_DEBUG   SCHED_DEBUG   VM_DEBUG   SECURITY_DEBUG   ]
++#  KASAN =          [ BASE KERNEL_DEV     BSD_DEV     FILESYS_DEV     SKYWALK_DEV     NETWORKING_DEV     PF_DEV     IOKIT_DEV     LIBKERN_DEV     PERF_DBG_KASAN   MACH_DEV     SCHED_DEV     VM_KASAN   SECURITY_DEV     ]
++#  SPTM =           [ BASE KERNEL_DEV     BSD_DEV     FILESYS_DEV     SKYWALK_DEV     NETWORKING_DEV     PF_DEV     IOKIT_DEV     LIBKERN_DEV     PERF_DBG_DEV     MACH_DEV     SCHED_DEV     VM_DEV     SECURITY_DEV     ]
++#
++######################################################################
++#
++machine		"arm64"						# <arm64>
++
++makeoptions	OSFMK_MACHINE = "arm64"				# <mach>
++
++options		COUNT_SYSCALLS		# count bsd system calls 	# <countcalls>
++options     TRASH_VFP_ON_SAVE   # <debug,trash_vfp>
++options		ALTERNATE_DEBUGGER	# <alternate_debugger>
++
++options   CONFIG_VNODES=1024		# <xsmall>
++
++options   CONFIG_FREEZE_SUSPENDED_MIN=4		# <xsmall>
++
++options	  CONFIG_MACH_APPROXIMATE_TIME
++
++options   CONFIG_KERNEL_INTEGRITY		# <kernel_integrity>
++
++options   CONFIG_RESLIDE_SHARED_CACHE		# <reslide_shared_cache>
++
++options   CONFIG_UBSAN_MINIMAL		# <ubsan_minimal>
++options   CONFIG_KERNEL_TBI		# <kernel_tbi>
++options   CONFIG_KERNEL_TAGGING		# <kernel_tagging>
+diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
+index 95553a0..f09a1dd 100644
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -77,8 +77,11 @@ IOKitInitializeTime( void )
+ 	t.tv_sec = 30;
+ 	t.tv_nsec = 0;
+ 
++// RTC is not present on this target
++#ifndef BCM2837
+ 	IOService::waitForService(
+ 		IOService::resourceMatching("IORTC"), &t );
++#endif
+ #if defined(__i386__) || defined(__x86_64__)
+ 	IOService::waitForService(
+ 		IOService::resourceMatching("IONVRAM"), &t );
+diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
+index e37762b..bb2897f 100644
+--- a/makedefs/MakeInc.def
++++ b/makedefs/MakeInc.def
+@@ -29,7 +29,7 @@ SUPPORTED_ARM64_MACHINE_CONFIGS = NONE
+ else ifneq ($(findstring _host,$(RC_ProjectName)),)
+ SUPPORTED_ARM64_MACHINE_CONFIGS = NONE
+ else
+-SUPPORTED_ARM64_MACHINE_CONFIGS = T6000 T6020 T6030 T6031 T6041 T6050 T8101 T8103 T8112 T8122 T8132 T8142 VMAPPLE
++SUPPORTED_ARM64_MACHINE_CONFIGS = BCM2837 T6000 T6020 T6030 T6031 T6041 T6050 T8101 T8103 T8112 T8122 T8132 T8142 VMAPPLE
+ 
+ SPTM_ENABLED_SOCS_MacOSX = t6000 t8112 t6020 t8122 t6030 t6031 t6041 t6050 t8132 t8142
+ EXCLAVES_ENABLED_SOCS_MacOSX = t8142 t6050
+@@ -93,6 +93,7 @@ MACHINE_FLAGS_ARM64_T8132 = -DARM64_BOARD_CONFIG_T8132			-mcpu=apple-m4
+ MACHINE_FLAGS_ARM64_T8142 = -DARM64_BOARD_CONFIG_T8142 			-mcpu=apple-m4+memtag+predres2
+ 
+ MACHINE_FLAGS_ARM64_VMAPPLE = -DARM64_BOARD_CONFIG_VMAPPLE              -march=armv8.5a+sme2
++MACHINE_FLAGS_ARM64_BCM2837 = -DARM64_BOARD_CONFIG_BCM2837
+ 
+ 
+ #
+diff --git a/osfmk/arm64/proc_reg.h b/osfmk/arm64/proc_reg.h
+index f4d148b..d3bb7ea 100644
+--- a/osfmk/arm64/proc_reg.h
++++ b/osfmk/arm64/proc_reg.h
+@@ -243,6 +243,14 @@
+ /* D-Cache, 128KB for Acc8 PCore, 8-way. 64KB for ECore, 8-way. */
+ #define MMU_CLINE   6                      /* cache line size is 1<<MMU_CLINE (64) */
+ 
++#elif defined (BCM2837) /* Raspberry Pi 3 */
++
++/* I-Cache. We don't have detailed spec so we just follow the ARM technical reference. */
++#define MMU_I_CLINE 6
++
++/* D-Cache. */
++#define MMU_CLINE   6
++
+ #elif defined (VMAPPLE)
+ 
+ /* I-Cache. */
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+index 6aa6fe4..cf15b2a 100644
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -706,6 +706,19 @@ common_start:
+ 	dsb		ish
+ 
+ 
++#if defined(BCM2837)
++	// Setup timer interrupt routing; must be done before MMU is enabled
++	mrs		x15, MPIDR_EL1						// Load MPIDR to get CPU number
++	and		x15, x15, #0xFF						// CPU number is in MPIDR Affinity Level 0
++	mov		x0, #0x4000
++	lsl		x0, x0, #16
++	add		x0, x0, #0x0040						// x0: 0x4000004X Core Timers interrupt control
++	add		x0, x0, x15, lsl #2
++	mov		w1, #0xF0 						// x1: 0xF0 	  Route to Core FIQs
++	str		w1, [x0]
++	isb		sy
++#endif
++
+ #ifndef __ARM_IC_NOALIAS_ICACHE__
+ 	/* Invalidate the TLB and icache on systems that do not guarantee that the
+ 	 * caches are invalidated on reset.
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index c977c98..cb50ea4 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -861,6 +861,7 @@ kernel_bootstrap_thread(void)
+ 	csm_initialize_provisioning_profiles();
+ #endif
+ 
++#ifndef BCM2837
+ 	kernel_bootstrap_log("trust_cache_init");
+ 
+ 	/* Initialize the runtime for the trust cache interface */
+@@ -868,6 +869,7 @@ kernel_bootstrap_thread(void)
+ 
+ 	/* Load the static and engineering trust caches */
+ 	load_static_trust_cache();
++#endif
+ 
+ 	kernel_startup_initialize_upto(STARTUP_SUB_LOCKDOWN);
+ 
+diff --git a/pexpert/pexpert/arm64/BCM2837.h b/pexpert/pexpert/arm64/BCM2837.h
+new file mode 100644
+index 0000000..d9f0723
+--- /dev/null
++++ b/pexpert/pexpert/arm64/BCM2837.h
+@@ -0,0 +1,67 @@
++/*
++ * Copyright (c) 2016 Apple Inc. All rights reserved.
++ */
++
++#ifndef _PEXPERT_ARM_BCM2837_H
++#define _PEXPERT_ARM_BCM2837_H
++
++#define NO_MONITOR 1
++#define NO_ECORE 1
++
++#define BCM2837
++#define BCM2837_BRINGUP
++#define ARM_ARCH_TIMER
++
++#define __ARM_ARCH__              8
++#define __ARM_VMSA__              8
++#define __ARM_VFP__               4
++#define __ARM_COHERENT_CACHE__    1
++#define __ARM_DEBUG__             7
++#define __ARM64_PMAP_SUBPAGE_L1__ 1
++
++#ifndef ASSEMBLER
++
++#define PI3_UART
++
++#define PI3_BREAK                               asm volatile("brk #0");
++
++#define BCM2837_GPFSEL0_V               (pi3_gpio_base_vaddr + 0x0)
++#define BCM2837_GPSET0_V                (pi3_gpio_base_vaddr + 0x1C)
++#define BCM2837_GPCLR0_V                (pi3_gpio_base_vaddr + 0x28)
++#define BCM2837_GPPUD_V                 (pi3_gpio_base_vaddr + 0x94)
++#define BCM2837_GPPUDCLK0_V             (pi3_gpio_base_vaddr + 0x98)
++
++#define BCM2837_FSEL_INPUT              0x0
++#define BCM2837_FSEL_OUTPUT             0x1
++#define BCM2837_FSEL_ALT0               0x4
++#define BCM2837_FSEL_ALT1               0x5
++#define BCM2837_FSEL_ALT2               0x6
++#define BCM2837_FSEL_ALT3               0x7
++#define BCM2837_FSEL_ALT4               0x3
++#define BCM2837_FSEL_ALT5               0x2
++
++#define BCM2837_FSEL_NFUNCS             54
++#define BCM2837_FSEL_REG(func)          (BCM2837_GPFSEL0_V + (4 * ((func) / 10)))
++#define BCM2837_FSEL_OFFS(func)         (((func) % 10) * 3)
++#define BCM2837_FSEL_MASK(func)         (0x7 << BCM2837_FSEL_OFFS(func))
++
++#define BCM2837_AUX_ENABLES_V           (pi3_aux_base_vaddr + 0x4)
++#define BCM2837_AUX_MU_IO_REG_V         (pi3_aux_base_vaddr + 0x40)
++#define BCM2837_AUX_MU_IER_REG_V        (pi3_aux_base_vaddr + 0x44)
++#define BCM2837_AUX_MU_IIR_REG_V        (pi3_aux_base_vaddr + 0x48)
++#define BCM2837_AUX_MU_LCR_REG_V        (pi3_aux_base_vaddr + 0x4C)
++#define BCM2837_AUX_MU_MCR_REG_V        (pi3_aux_base_vaddr + 0x50)
++#define BCM2837_AUX_MU_LSR_REG_V        (pi3_aux_base_vaddr + 0x54)
++#define BCM2837_AUX_MU_MSR_REG_V        (pi3_aux_base_vaddr + 0x58)
++#define BCM2837_AUX_MU_SCRATCH_V        (pi3_aux_base_vaddr + 0x5C)
++#define BCM2837_AUX_MU_CNTL_REG_V       (pi3_aux_base_vaddr + 0x60)
++#define BCM2837_AUX_MU_STAT_REG_V       (pi3_aux_base_vaddr + 0x64)
++#define BCM2837_AUX_MU_BAUD_REG_V       (pi3_aux_base_vaddr + 0x68)
++#define BCM2837_PUT32(addr, value) do { *((volatile uint32_t *) addr) = value; } while(0)
++#define BCM2837_GET32(addr) *((volatile uint32_t *) addr)
++
++#define PLATFORM_PANIC_LOG_PADDR        0x3c0fc000
++#define PLATFORM_PANIC_LOG_SIZE         16384        // 16kb
++#endif /* ! ASSEMBLER */
++
++#endif /* ! _PEXPERT_ARM_BCM2837_H */
+diff --git a/pexpert/pexpert/arm64/Makefile b/pexpert/pexpert/arm64/Makefile
+index 75938b5..9d094bf 100644
+--- a/pexpert/pexpert/arm64/Makefile
++++ b/pexpert/pexpert/arm64/Makefile
+@@ -33,7 +33,8 @@ PRIVATE_KERNELFILES = \
+ 	H15.h \
+ 	H16.h \
+ 	H17.h \
+-	VMAPPLE.h
++	VMAPPLE.h \
++	BCM2837.h
+ 
+ 
+ # Headers installed into System.framework/PrivateHeaders (userspace internal SDK only).
+diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_config.h
+index 5a6cd33..ad8f3aa 100644
+--- a/pexpert/pexpert/arm64/board_config.h
++++ b/pexpert/pexpert/arm64/board_config.h
+@@ -304,6 +304,16 @@
+ 
+ 
+ 
++#ifdef ARM64_BOARD_CONFIG_BCM2837
++#include <pexpert/arm64/BCM2837.h>
++
++#define MAX_L2_CLINE                   6
++#define MAX_CPUS                       4
++#define MAX_CPU_CLUSTERS               1
++
++#define NO_XNU_PLATFORM_ERROR_HANDLER  1
++#endif  /* ARM64_BOARD_CONFIG_BCM2837 */
++
+ #ifdef ARM64_BOARD_CONFIG_VMAPPLE
+ #include <pexpert/arm64/VMAPPLE.h>
+ 

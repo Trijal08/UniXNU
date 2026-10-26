@@ -1,0 +1,13 @@
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index cb50ea4..53f37a8 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -861,7 +861,7 @@ kernel_bootstrap_thread(void)
+ 	csm_initialize_provisioning_profiles();
+ #endif
+ 
+-#ifndef BCM2837
++#if !defined(BCM2837) || (defined(XNU_NATIVE_TRUST_CACHE) && XNU_NATIVE_TRUST_CACHE)
+ 	kernel_bootstrap_log("trust_cache_init");
+ 
+ 	/* Initialize the runtime for the trust cache interface */

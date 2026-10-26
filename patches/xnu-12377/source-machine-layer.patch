@@ -1,0 +1,56 @@
+diff --git a/config/MASTER b/config/MASTER
+index 1b97480..192e99c 100644
+--- a/config/MASTER
++++ b/config/MASTER
+@@ -328,6 +328,8 @@ options		CONFIG_EXCLAVES			# <config_exclaves>
+ # Compile XNU with PPL support.
+ options   CONFIG_PMAP_PPL			# <config_pmap_ppl>
+ 
++options   CONFIG_APPLE_AMCC			# <apple_amcc>
++
+ options   NOS_ARM_ASM			# <nos_arm_asm>
+ options   NOS_ARM_PMAP			# <nos_arm_pmap>
+ 
+diff --git a/config/MASTER.arm64.bcm2837 b/config/MASTER.arm64.bcm2837
+index d6000b6..5c66c91 100644
+--- a/config/MASTER.arm64.bcm2837
++++ b/config/MASTER.arm64.bcm2837
+@@ -22,7 +22,7 @@
+ #  -------- ----- -- ---------------
+ #
+ #  ARM_EXTRAS_BASE = [ config_pmap_ppl ]
+-#  KERNEL_BASE =    [ arm64 xsmall msgb_small config_embedded config_enforce_signed_code config_code_signature_reconstitution config_requires_u32_munging config_darkboot ARM_EXTRAS_BASE ]
++#  KERNEL_BASE =    [ arm64 nos_arm_asm nos_arm_pmap xsmall msgb_small config_embedded config_enforce_signed_code config_code_signature_reconstitution config_requires_u32_munging config_darkboot ARM_EXTRAS_BASE ]
+ #  KERNEL_RELEASE = [ KERNEL_BASE release ]
+ #  KERNEL_DEV =     [ KERNEL_BASE development mach_assert config_xnupost proc_ref_debug config_proc_resource_limits config_ext_paniclog ]
+ #  KERNEL_DEBUG =   [ KERNEL_BASE debug mach_assert config_xnupost config_waitq_stats config_workloop_debug config_proc_resource_limits config_ext_paniclog ]
+@@ -66,8 +66,8 @@
+ 
+ #  PERF_DBG_BASE =  [ mach_kdp config_serial_kdp CPU_COUNTERS_BASE kperf PERF_EXTRAS_BASE ]
+ #  PERF_DBG_RELEASE=[ PERF_DBG_BASE ist_kdebug ]
+-#  PERF_DBG_DEV =   [ PERF_DBG_BASE config_dtrace lock_stats zleaks alternate_debugger sched_hygiene_debug config_debug_syscall_rejection config_iotrace PERF_EXTRAS_DEV config_memory_microstackshot ]
+-#  PERF_DBG_DEBUG = [ PERF_DBG_BASE config_dtrace lock_stats zleaks alternate_debugger sched_hygiene_debug config_debug_syscall_rejection config_iotrace PERF_EXTRAS_DEBUG config_memory_microstackshot ]
++#  PERF_DBG_DEV =   [ PERF_DBG_BASE config_dtrace lock_stats zleaks alternate_debugger config_debug_syscall_rejection config_iotrace PERF_EXTRAS_DEV config_memory_microstackshot ]
++#  PERF_DBG_DEBUG = [ PERF_DBG_BASE config_dtrace lock_stats zleaks alternate_debugger config_debug_syscall_rejection config_iotrace PERF_EXTRAS_DEBUG config_memory_microstackshot ]
+ #  PERF_DBG_KASAN = [ PERF_DBG_BASE config_dtrace lock_stats zleaks alternate_debugger config_debug_syscall_rejection config_iotrace PERF_EXTRAS_DEV config_memory_microstackshot ]
+ #  PARAVIRT_BASE =  [ ]
+ #  MACH_BASE =      [ mach config_ecc_logging vc_progress_white importance_inheritance config_atm config_coalitions config_iosched config_library_validation config_sysdiagnose config_telemetry config_mach_bridge_recv_time config_quiesce_counter config_io_compression_stats phys_write_acct config_service_port_info PARAVIRT_BASE ]
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+index 878b515..0db4600 100644
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -35,10 +35,10 @@ osfmk/arm64/WKdmCompress_4k.s	standard
+ osfmk/arm64/WKdmData.s		standard
+ osfmk/arm64/lz4_decode_arm64.s  standard
+ osfmk/arm64/lz4_encode_arm64.s  standard
+-osfmk/arm64/amcc_rorgn_ppl.c optional nos_arm_asm config_pmap_ppl
+-osfmk/arm64/amcc_rorgn_ppl_amcc.c optional nos_arm_asm config_pmap_ppl
+-osfmk/arm64/amcc_rorgn_common.c optional nos_arm_asm
+-osfmk/arm64/amcc_rorgn_pv_ctrr.c optional nos_arm_asm
++osfmk/arm64/amcc_rorgn_ppl.c optional nos_arm_asm config_pmap_ppl apple_amcc
++osfmk/arm64/amcc_rorgn_ppl_amcc.c optional nos_arm_asm config_pmap_ppl apple_amcc
++osfmk/arm64/amcc_rorgn_common.c optional nos_arm_asm apple_amcc
++osfmk/arm64/amcc_rorgn_pv_ctrr.c optional nos_arm_asm apple_amcc
+ osfmk/arm64/bcopy.s standard
+ osfmk/arm64/bzero.s standard
+ osfmk/arm/caches.c		standard

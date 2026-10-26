@@ -1,0 +1,56 @@
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -83,6 +83,24 @@
+ };
+ 
+ MARK_AS_HIBERNATE_DATA_CONST_LATE static struct pe_serial_functions* gPESF = NULL;
++
++#if XNU_NATIVE_DWC3_CONSOLE
++extern bool unixnu_dwc3_init(void);
++extern unsigned int unixnu_dwc3_ready(void);
++extern void unixnu_dwc3_put(uint8_t);
++extern unsigned int unixnu_dwc3_receive_ready(void);
++extern uint8_t unixnu_dwc3_receive(void);
++static void unixnu_dwc3_noop(void) { }
++static struct pe_serial_functions unixnu_dwc3_functions = {
++    .init = unixnu_dwc3_noop,
++    .transmit_ready = unixnu_dwc3_ready,
++    .transmit_data = unixnu_dwc3_put,
++    .receive_ready = unixnu_dwc3_receive_ready,
++    .receive_data = unixnu_dwc3_receive,
++    .device = SERIAL_UNKNOWN,
++};
++#endif
++
+ 
+ /**
+  * Whether uart has been initialized already. This value is kept across a
+@@ -899,6 +917,14 @@
+ 		return gPESF != NULL;
+ 	}
+ 
++#if XNU_NATIVE_DWC3_CONSOLE
++	if (unixnu_dwc3_init()) {
++		register_serial_functions(&unixnu_dwc3_functions);
++		uart_initted = true;
++		return 1;
++	}
++#endif
++
+ 	soc_base = pe_arm_get_soc_base_phys();
+ 
+ 	if (soc_base == 0) {
+--- a/osfmk/arm/rtclock.c
++++ b/osfmk/arm/rtclock.c
+@@ -328,6 +328,11 @@
+ 	unsigned int             user_mode;
+ 	uintptr_t                pc;
+ 
++#if XNU_NATIVE_DWC3_CONSOLE
++	extern void unixnu_dwc3_poll(void);
++	unixnu_dwc3_poll();
++#endif
++
+ 	cdp = getCpuDatap();
+ 
+ 	cdp->cpu_stat.timer_cnt++;

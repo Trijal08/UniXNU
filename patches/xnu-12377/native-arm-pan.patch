@@ -1,0 +1,16 @@
+diff --git a/pexpert/pexpert/arm64/BCM2837.h b/pexpert/pexpert/arm64/BCM2837.h
+index d9f0723..61afb61 100644
+--- a/pexpert/pexpert/arm64/BCM2837.h
++++ b/pexpert/pexpert/arm64/BCM2837.h
+@@ -19,6 +19,11 @@
+ #define __ARM_DEBUG__             7
+ #define __ARM64_PMAP_SUBPAGE_L1__ 1
+ 
++/* Explicit native ARMv8.1+ bring-up; the original A53 target has no PAN. */
++#if defined(XNU_NATIVE_PAN) && XNU_NATIVE_PAN
++#define __ARM_PAN_AVAILABLE__      1
++#endif
++
+ #ifndef ASSEMBLER
+ 
+ #define PI3_UART
