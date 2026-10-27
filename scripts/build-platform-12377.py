@@ -20,7 +20,9 @@ source = ROOT / 'scripts/native-dwc3-console.c' if args.component == 'NativeDwc3
 if args.component == 'ArmCpu':
     patched = out / 'ArmCpu.cpp'
     patched.write_bytes(source.read_bytes())
-    for patch_name in ('ArmCpu-arm64-assembly.patch', 'ArmCpu-12377-boot-interrupt.patch'):
+    # ArmCpu-arm64-assembly.patch is not applied: the driver source now carries that change
+    # itself, so every build gets it rather than only the xnu-12377 one.
+    for patch_name in ('ArmCpu-12377-boot-interrupt.patch',):
         driver_patch = ROOT / 'patches/drivers' / patch_name
         subprocess.run(['git', 'apply', '--directory', str(out.relative_to(ROOT)), driver_patch], cwd=ROOT, check=True)
     source = patched
@@ -55,8 +57,14 @@ result = subprocess.run(command, cwd=record['directory'], capture_output=True, t
 if result.returncode:
     raise SystemExit(result.stdout + result.stderr)
 data = destination.read_bytes()
-if struct.unpack_from('<4I', data) != (0xfeedfacf, 0x100000c, 0, 1):
-    raise SystemExit('Expected a plain ARM64 Mach-O object')
+# MH_MAGIC_64, CPU_TYPE_ARM64, MH_OBJECT, and a subtype of either ARM64_ALL (0) or ARM64E (2).
+# arm64e is accepted because an arm64e kernel can only link arm64e archives.
+magic, cputype, cpusubtype, filetype = struct.unpack_from('<4I', data)
+# The top byte is CPU_SUBTYPE_MASK, the capability bits; arm64e carries the pointer-auth ABI
+# version there, so an arm64e object reports 0x80000002 rather than 2.
+if (magic, cputype, filetype) != (0xfeedfacf, 0x100000c, 1) or (cpusubtype & ~0xff000000) not in (0, 2):
+    raise SystemExit('Expected an ARM64 or ARM64E Mach-O object, got '
+                     f'magic {magic:#x} cputype {cputype:#x} subtype {cpusubtype} filetype {filetype}')
 cursor = 32
 deployment = None
 for _ in range(struct.unpack_from('<I', data, 16)[0]):
