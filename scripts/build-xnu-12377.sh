@@ -256,7 +256,12 @@ make ${MAKE_KEEP_GOING[@]+"${MAKE_KEEP_GOING[@]}"} -C "$WORK" "${XNU_BUILD_TARGE
 # XNU_EXTRA_LD_ARCHIVES: space-separated archives force-loaded into the kernel link, for the board's
 # own link stubs (CONFIG_XNU_EXTRA_LD_ARCHIVES). A non-empty value also enables the archive link path,
 # so a board that needs only stubs does not have to turn on an unrelated provider to get one.
+# XNU_EXTRA_LD_ARCHIVES: plain archives, so the linker takes only the members whose symbols are
+# still undefined; that is what link stubs want. XNU_FORCE_LD_ARCHIVES: force-loaded, for archives
+# whose contents nothing references yet but that must still be present, such as the PMGR shim whose
+# _sheng_pmgr_run the payload step requires the kernel to export.
 EXTRA_LD_ARCHIVES=${XNU_EXTRA_LD_ARCHIVES:-}
+FORCE_LD_ARCHIVES=${XNU_FORCE_LD_ARCHIVES:-}
 EXTRA_LD_FLAGS=""
 for archive in $EXTRA_LD_ARCHIVES; do
   if [ ! -f "$archive" ]; then
@@ -264,6 +269,20 @@ for archive in $EXTRA_LD_ARCHIVES; do
     exit 1
   fi
   EXTRA_LD_FLAGS="$EXTRA_LD_FLAGS $archive"
+done
+# XNU_FORCE_LD_SYMBOLS: names marked undefined with -u so the linker must resolve them, which pulls
+# the defining member out of an archive even though no kernel code references it. -force_load alone
+# did not keep _sheng_pmgr_run, and the payload step requires the kernel to export it.
+for symbol in ${XNU_FORCE_LD_SYMBOLS:-}; do
+  EXTRA_LD_FLAGS="$EXTRA_LD_FLAGS -Wl,-u,$symbol"
+done
+for archive in $FORCE_LD_ARCHIVES; do
+  if [ ! -f "$archive" ]; then
+    echo "XNU_FORCE_LD_ARCHIVES: $archive does not exist" >&2
+    exit 1
+  fi
+  EXTRA_LD_FLAGS="$EXTRA_LD_FLAGS -Wl,-force_load,$archive"
+  EXTRA_LD_ARCHIVES="$EXTRA_LD_ARCHIVES $archive"
 done
 if [ -n "$EXTRA_LD_ARCHIVES" ] || [ "$NATIVE_UFS_EXYNOS" = 1 ] || [ "$SOURCE_CRYPTO" = 1 ] || [ "$ARM_DT_PLATFORM" = 1 ] || [ "$ARMCPU" = 1 ] || [ "$NATIVE_DWC3_CONSOLE" = 1 ] || [ "$SOURCE_PTHREAD" = 1 ] || [ "$NATIVE_UFS_SM8350" = 1 ]; then
   # First produce the unlinked objects/filelist for collision discovery.
