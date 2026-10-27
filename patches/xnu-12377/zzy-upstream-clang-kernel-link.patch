@@ -1,9 +1,11 @@
-Satisfy the two kinds of link reference an upstream-clang kernel build cannot resolve.
+Satisfy the two kinds of link reference an upstream-clang kernel build cannot resolve, and
+offer the 16 KiB page granule the iOS arm64e userland is built and signed for.
 
 apple-clang drops C++ static destructors when it compiles kernel code; upstream clang keeps the
 ones marked LIBKERN_ALWAYS_DESTROY and registers them with __cxa_atexit, which the kernel does
-not have. And the PGO buffer writers OSKext declares come from libprofile_rt in the Xcode
-toolchain, which the open-source build does not have either.
+not have. The PGO buffer writers OSKext declares come from libprofile_rt in the Xcode toolchain,
+which the open-source build does not have either. And BCM2837 is a 4 KiB board: XNU_PAGE_SIZE_16K
+switches it to the granule VMAPPLE uses, so iOS binaries and signatures need no rewriting.
 
 --- a/libkern/c++/OSKext.cpp
 +++ b/libkern/c++/OSKext.cpp
@@ -71,3 +73,23 @@ toolchain, which the open-source build does not have either.
  extern lck_grp_t * IOLockGroup;
  extern kmod_info_t g_kernel_kmod_info;
  #if CONFIG_SPTM
+--- a/pexpert/pexpert/arm64/BCM2837.h
++++ b/pexpert/pexpert/arm64/BCM2837.h
+@@ -19,6 +19,17 @@
+ #define __ARM_DEBUG__             7
+ #define __ARM64_PMAP_SUBPAGE_L1__ 1
+ 
++/* 16 KiB pages. iOS arm64e binaries are segment-aligned for a 16 KiB page and their code signatures
++ * hash 16 KiB pages, so a kernel meant to execute them unmodified has to use the same granule; at
++ * 4 KiB every Mach-O and every signature has to be rewritten first. The subpage L1 layouts describe
++ * a 4 KiB translation table, so they go: VMAPPLE drops them for exactly this reason.
++ * XNU_PAGE_SIZE_16K arrives through OTHER_CFLAGS, so it reaches the assembler too -- proc_reg.h
++ * keys the TCR granule and T0SZ/T1SZ off __ARM_16K_PG__ and start.s reads them. */
++#if defined(XNU_PAGE_SIZE_16K) && XNU_PAGE_SIZE_16K
++#define __ARM_16K_PG__            1
++#undef  __ARM64_PMAP_SUBPAGE_L1__
++#endif
++
+ /* Architectural pointer authentication (FEAT_PAuth) for an arm64e userland on a standard ARMv8.3+
+  * core such as Cortex-X4. Deliberately outside the XNU_NATIVE_PAN block: this has to be visible to
+  * the assembler as well, and XNU_ARCH_PAC reaches it through OTHER_CFLAGS, which feeds both

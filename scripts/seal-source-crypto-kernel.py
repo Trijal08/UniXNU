@@ -16,8 +16,11 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('kernel', type=Path)
 args = parser.parse_args()
 data = bytearray(args.kernel.read_bytes())
-if struct.unpack_from('<4I', data) != (0xfeedfacf, 0x100000c, 0, 2):
-    raise SystemExit('Expected a source-built ordinary ARM64 MH_EXECUTE kernel')
+# arm64 is cpusubtype 0, arm64e is 2 with the pointer-authentication ABI version in the top byte of
+# CPU_SUBTYPE_MASK. The POST contract is over bytes of __text and says nothing about the ABI.
+magic, cputype, cpusubtype, filetype = struct.unpack_from('<4I', data)
+if (magic, cputype, filetype) != (0xfeedfacf, 0x100000c, 2) or (cpusubtype & ~0xff000000) not in (0, 2):
+    raise SystemExit('Expected a source-built ARM64 MH_EXECUTE kernel')
 if b'_source_corecrypto14_bootstrap\0' not in data:
     raise SystemExit('Input does not contain the explicit source-provider bootstrap')
 offset = 32

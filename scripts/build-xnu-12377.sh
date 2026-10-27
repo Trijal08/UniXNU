@@ -29,6 +29,17 @@ PAC_DEFINE=""
 if [ "$XNU_KERNEL_ARCH" = arm64e ]; then
   PAC_DEFINE="-DXNU_ARCH_PAC=1"
 fi
+# XNU_PAGE_SIZE_16K: build BCM2837 with the 16 KiB granule instead of 4 KiB. It travels the same way
+# as the PAC define, through OTHER_CFLAGS, because proc_reg.h keys the TCR granule and T0SZ/T1SZ off
+# __ARM_16K_PG__ and osfmk/arm64/start.s reads those at the assembler stage, which runs without -arch.
+PAGE_SIZE_16K=${XNU_PAGE_SIZE_16K:-0}
+if [ "$PAGE_SIZE_16K" != 0 ] && [ "$PAGE_SIZE_16K" != 1 ]; then
+  echo 'XNU_PAGE_SIZE_16K must be 0 or 1' >&2
+  exit 1
+fi
+if [ "$PAGE_SIZE_16K" = 1 ]; then
+  PAC_DEFINE="$PAC_DEFINE -DXNU_PAGE_SIZE_16K=1"
+fi
 
 WORK=.cache/xnu-$XNU_VERSION-work
 FAKEROOT=$ROOT/.cache/xnu-$XNU_VERSION-fakeroot
@@ -349,7 +360,7 @@ if [ -n "$EXTRA_LD_ARCHIVES" ] || [ "$NATIVE_UFS_EXYNOS" = 1 ] || [ "$SOURCE_CRY
   rm -f "$OBJ/pexpert/DEVELOPMENT/pe_serial.o" "$OBJ/osfmk/DEVELOPMENT/rtclock.o"
   build_kernel "LD_KERNEL_ARCHIVES=$ARCHIVE_FLAGS" "XNU_EXTERNAL_KERNEL_ARCHIVES=$ARCHIVE_DEPENDENCIES"
   if [ "$SOURCE_CRYPTO" = 1 ]; then
-    python3 scripts/seal-source-crypto-kernel.py --static-if-defaults "$OBJ/mach.development.bcm2837.unstripped.noctf"
+    python3 scripts/seal-source-crypto-kernel.py "$OBJ/mach.development.bcm2837.unstripped.noctf"
   fi
 else
   build_kernel "LD_KERNEL_ARCHIVES=-L$FAKEROOT/usr/local/lib/kernel -lfirehose_kernel$EXTRA_LD_FLAGS"

@@ -20,10 +20,41 @@ import pbxproj
 from xnu_symbols import kernel_names
 SOURCE = ROOT / 'refer/corecrypto-2023'
 REVISION = '11fba65b12d8830630e248dfa8344caf8b065f26'
-OUT = ROOT / 'build/corecrypto-2023'
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--namespace', action='store_true', help='Isolate provider globals from XNU crypto wrappers')
+parser.add_argument('--xnu-12377', dest='xnu_12377', action='store_true',
+                    help='Build against the xnu-12377 (iOS 26) headers and kernel, into build/corecrypto-12377')
 args = parser.parse_args()
+
+# The same pinned provider source serves both kernels; only the XNU side it is compiled and audited
+# against differs -- its Kernel.framework headers, the object directory whose link.filelist names the
+# kernel's own symbols, and the architecture that kernel was built for.
+if args.xnu_12377:
+    OUT = ROOT / 'build/corecrypto-12377'
+    FAKEROOT = ROOT / '.cache/xnu-12377.121.6-fakeroot'
+    OBJECT_DIRECTORY = ROOT / 'build/xnu-12377.121.6/ios-obj/DEVELOPMENT_ARM64_BCM2837'
+    IOS_VERSION = '26.0'
+else:
+    OUT = ROOT / 'build/corecrypto-2023'
+    FAKEROOT = ROOT / '.cache/fakeroot'
+    OBJECT_DIRECTORY = None
+    IOS_VERSION = '17.0'
+# LC_BUILD_VERSION encodes the minimum OS as xxxx.yy.zz in nibbles: iOS 17.0 is 0x110000 and 26.0 is
+# 0x1a0000. It is checked, not assumed, so an object built against the wrong SDK cannot slip in.
+DEPLOYMENT_VERSION = sum(int(part) << shift for part, shift
+                         in zip((IOS_VERSION.split('.') + ['0', '0'])[:3], (16, 8, 0)))
+# Follow the kernel's architecture, taken from one of its own recorded compile commands: an arm64
+# archive is silently dropped from an arm64e kernel link, because ar writes a fat archive and the
+# linker then resolves only the slice matching its own architecture.
+KERNEL_ARCH = 'arm64'
+KERNEL_SUBTYPE = 0
+if OBJECT_DIRECTORY is not None:
+    recipes = sorted(OBJECT_DIRECTORY.rglob('pthread_shims.o.json'))
+    if recipes:
+        arguments = json.loads(recipes[0].read_text().strip().rstrip(','))['arguments']
+        KERNEL_ARCH = next((value for flag, value in zip(arguments, arguments[1:])
+                            if flag == '-arch'), 'arm64')
+        KERNEL_SUBTYPE = {'arm64': 0, 'arm64e': 2}[KERNEL_ARCH]
 
 
 def names(path, mode):
@@ -73,8 +104,9 @@ for header in SOURCE.glob('*/corecrypto/*.h'):
     if not link.exists():
         link.symlink_to(header)
 sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
-framework = ROOT / '.cache/fakeroot/System/Library/Frameworks/Kernel.framework/Versions/A'
-command = ['xcrun', '--sdk', 'iphoneos', 'clang', '-target', 'arm64-apple-ios17.0', '-isysroot', sdk,
+framework = FAKEROOT / 'System/Library/Frameworks/Kernel.framework/Versions/A'
+command = ['xcrun', '--sdk', 'iphoneos', 'clang', '-arch', KERNEL_ARCH,
+           f'-miphoneos-version-min={IOS_VERSION}', '-isysroot', sdk,
            '-mkernel', '-ffreestanding', '-fno-builtin', '-fno-stack-check', '-std=gnu99', '-fblocks', '-O2',
            '-fno-vectorize', '-fno-slp-vectorize', '-mno-implicit-float',
            '-DKERNEL=1', '-DKERNEL_PRIVATE=1', '-DBUILDKERNEL=1', '-DCC_USE_ASM=0', '-DNDEBUG=1',
@@ -87,7 +119,7 @@ if args.namespace:
     plain = OUT / 'libcorecrypto_kernel_noasm.a'
     if not plain.is_file():
         raise SystemExit('Build the plain provider once before creating its namespace')
-    collisions = sorted(names(plain, '-U') & kernel_names(ROOT))
+    collisions = sorted(names(plain, '-U') & kernel_names(ROOT, object_directory=OBJECT_DIRECTORY))
     if any(not name[1:].isidentifier() for name in collisions):
         raise SystemExit('A colliding symbol cannot be namespaced with a C identifier')
     header = OUT / 'namespace.h'
@@ -126,8 +158,12 @@ if failed:
 for result in results:
     data = (object_dir / result['object']).read_bytes()
     magic, cpu, subtype, kind, count, size = struct.unpack_from('<6I', data)
-    if (magic, cpu, subtype, kind) != (0xfeedfacf, 0x100000c, 0, 1):
-        raise SystemExit(f'Wrong object architecture: {result["object"]}')
+    # arm64 is cpusubtype 0, arm64e is 2 with the pointer-authentication ABI version in the top byte
+    # of CPU_SUBTYPE_MASK. Every object has to carry the kernel's own subtype: a mixed set makes ar
+    # write a fat archive, and the kernel link then takes only the slice matching its architecture.
+    if (magic, cpu, kind) != (0xfeedfacf, 0x100000c, 1) or (subtype & ~0xff000000) != KERNEL_SUBTYPE:
+        raise SystemExit(f'Wrong object architecture: {result["object"]} '
+                         f'(expected {KERNEL_ARCH}, cpusubtype {subtype:#010x})')
     offset = 32
     deployment = None
     for _ in range(count):
@@ -135,14 +171,15 @@ for result in results:
         if cmd == 0x32:
             deployment = struct.unpack_from('<II', data, offset + 8)
         offset += length
-    if deployment != (2, 0x110000):
-        raise SystemExit(f'Wrong deployment: {result["object"]}: {deployment}')
+    if deployment != (2, DEPLOYMENT_VERSION):
+        raise SystemExit(f'Wrong deployment: {result["object"]}: {deployment}, '
+                         f'expected iOS {IOS_VERSION} ({DEPLOYMENT_VERSION:#x})')
 archive = OUT / f'libcorecrypto_kernel_noasm{variant}.a'
 archive.unlink(missing_ok=True)
 subprocess.run(['xcrun', 'ar', 'rcs', archive, *[object_dir / result['object'] for result in results]], check=True)
 defined = names(archive, '-U')
 undefined = names(archive, '-u') - defined
-kernel_exports = kernel_names(ROOT)
+kernel_exports = kernel_names(ROOT, object_directory=OBJECT_DIRECTORY)
 survey = {'unresolved_external_names': sorted(undefined), 'missing_kernel_names': sorted(undefined - kernel_exports),
           'duplicate_kernel_names': sorted(defined & kernel_exports), 'provider_registered': False,
           'abi_compatibility_proven': False}

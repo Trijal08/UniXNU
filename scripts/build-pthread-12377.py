@@ -35,6 +35,13 @@ if len(recipes) != 1:
 recipe = recipes[0]
 record = json.loads(recipe.read_text().strip().rstrip(','))
 sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
+# The libpthread sources have to be built for the architecture the kernel was built for. Taking it
+# from the recorded pthread_shims.c command is what keeps them in step: an arm64 object next to an
+# arm64e bootstrap makes ar write a fat archive, and the kernel link then resolves only the slice
+# matching its own architecture -- which silently drops every libpthread object.
+KERNEL_ARCH = next((value for flag, value in zip(record['arguments'], record['arguments'][1:])
+                    if flag == '-arch'), 'arm64')
+KERNEL_SUBTYPE = {'arm64': 0, 'arm64e': 2}[KERNEL_ARCH]
 
 
 def compile_one(source, destination, namespace=None):
@@ -54,7 +61,7 @@ def compile_one(source, destination, namespace=None):
             index += 1
     else:
         framework = ROOT / '.cache/xnu-12377.121.6-fakeroot/System/Library/Frameworks/Kernel.framework/Versions/A'
-        command = ['xcrun', '--sdk', 'iphoneos', 'clang', '-target', 'arm64-apple-ios26.0',
+        command = ['xcrun', '--sdk', 'iphoneos', 'clang', '-arch', KERNEL_ARCH,
                    '-isysroot', sdk, '-mkernel', '-ffreestanding', '-fno-builtin', '-fno-stack-check',
                    '-std=gnu11', '-fblocks', '-O2', '-mgeneral-regs-only',
                    '-DKERNEL=1', '-DKERNEL_PRIVATE=1', '-DXNU_KERNEL_PRIVATE=1',
@@ -70,8 +77,12 @@ def compile_one(source, destination, namespace=None):
     if result.returncode:
         raise SystemExit(f'{source.name}: compilation failed\n{result.stdout}')
     data = destination.read_bytes()
-    if struct.unpack_from('<4I', data) != (0xfeedfacf, 0x100000c, 0, 1):
-        raise SystemExit('Unexpected pthread object architecture')
+    # arm64 is cpusubtype 0, arm64e is 2 with the pointer-authentication ABI version in the top byte
+    # of CPU_SUBTYPE_MASK. Every object must carry the kernel's own subtype, so that the archive stays
+    # thin and the kernel link sees all of it.
+    magic, cputype, cpusubtype, filetype = struct.unpack_from('<4I', data)
+    if (magic, cputype, filetype) != (0xfeedfacf, 0x100000c, 1) or (cpusubtype & ~0xff000000) != KERNEL_SUBTYPE:
+        raise SystemExit(f'{source.name}: expected an {KERNEL_ARCH} object, got cpusubtype {cpusubtype:#010x}')
     offset = 32
     deployment = None
     for _ in range(struct.unpack_from('<I', data, 16)[0]):
