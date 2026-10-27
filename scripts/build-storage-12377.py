@@ -20,6 +20,16 @@ if subprocess.check_output(['git', '-C', SOURCE, 'rev-parse', 'HEAD'], text=True
     raise SystemExit('Expected pinned IOStorageFamily 337.100.1')
 if subprocess.check_output(['git', '-C', SOURCE, 'status', '--porcelain'], text=True):
     raise SystemExit('IOStorageFamily reference must remain immutable')
+# --host picks the SoC glue, exactly as build-arm-driver.py does for the xnu-10063 build: sm8350
+# applies zeta's source patch and defines NATIVE_UFS_SM8350, exynos uses the ExynosUfs* headers that
+# already live in the driver and needs no patch. --root-partition names the GPT partition holding
+# the root image (userdata on sheng, darwin on komodo).
+import argparse
+_parser = argparse.ArgumentParser(description=__doc__)
+_parser.add_argument('--host', choices=['sm8350', 'exynos'], default='sm8350')
+_parser.add_argument('--root-partition', metavar='NAME')
+_args = _parser.parse_args()
+
 OUT = ROOT / 'build/storage-12377'
 OUT.mkdir(parents=True, exist_ok=True)
 UFS = OUT / 'NativeUfs'
@@ -29,12 +39,35 @@ shutil.copytree(ROOT / 'drivers/NativeUfs', UFS,
 # silently skip paths outside that repository-relative cwd prefix. Apply from
 # a fresh non-repository directory to the explicit exported source path, then
 # prove the complete patch is present before compiling anything.
-patch = ROOT / 'patches/drivers/NativeUfs-sm8350.patch'
-with tempfile.TemporaryDirectory(prefix='unixnu-ufs-patch-') as temporary:
-    command = ['git', 'apply', '--unsafe-paths', '--directory', str(UFS)]
-    subprocess.run(command + [str(patch)], cwd=temporary, check=True)
-    subprocess.run(command + ['--reverse', '--check', str(patch)], cwd=temporary, check=True)
-print('Storage 12377: complete SM8350 source patch verified', flush=True)
+if _args.host == 'sm8350':
+    patch = ROOT / 'patches/drivers/NativeUfs-sm8350.patch'
+    with tempfile.TemporaryDirectory(prefix='unixnu-ufs-patch-') as temporary:
+        command = ['git', 'apply', '--unsafe-paths', '--directory', str(UFS)]
+        subprocess.run(command + [str(patch)], cwd=temporary, check=True)
+        subprocess.run(command + ['--reverse', '--check', str(patch)], cwd=temporary, check=True)
+    print('Storage 12377: complete SM8350 source patch verified', flush=True)
+else:
+    print('Storage 12377: Exynos host glue, no source patch needed', flush=True)
+# The IOKit/storage headers must come from the same pinned IOStorageFamily as the sources, not from
+# build/storage-abi, which prepare-storage-headers.py generates for the xnu-10063 kernel from a
+# different revision. Mixing them gives "use of undeclared identifier" on members such as
+# _processShutdownThread. The sources are flat here, so they are republished under IOKit/storage.
+ABI = OUT / 'abi/include/IOKit/storage'
+ABI.mkdir(parents=True, exist_ok=True)
+for header in sorted(SOURCE.glob('*.h')):
+    shutil.copy(header, ABI / header.name)
+# TargetConditionals.h is an SDK header the storage sources include; the xnu-10063 ABI directory
+# publishes it at its include root, so this one does too rather than depending on the host sysroot.
+_target_conditionals = ROOT / 'scripts/linux/TargetConditionals.h'
+if not _target_conditionals.is_file():
+    _target_conditionals = ROOT / 'build/storage-abi/include/TargetConditionals.h'
+if _target_conditionals.is_file():
+    shutil.copy(_target_conditionals, ABI.parent.parent / 'TargetConditionals.h')
+else:
+    raise SystemExit('no TargetConditionals.h to publish for the storage build')
+print(f'Storage 12377: {len(list(ABI.glob("*.h")))} IOKit/storage headers from the pinned source',
+      flush=True)
+
 OBJ = ROOT / 'build/xnu-12377.121.6/ios-obj/DEVELOPMENT_ARM64_BCM2837'
 record = json.loads((OBJ / 'iokit/DEVELOPMENT/IOPlatformExpert.cpo.json').read_text().strip().rstrip(','))
 
@@ -95,9 +128,13 @@ def compile_one(source, record):
         elif value not in ('-MD', '-MMD', '-MP') and not value.startswith('-W'):
             command.append(value)
         index += 1
-    command += extra + ['-I', str(ROOT / 'build/storage-abi/include'), '-I', str(SOURCE),
+    command += extra + ['-I', str(OUT / 'abi/include'), '-I', str(SOURCE),
                 '-I', str(UFS),
-                '-DNATIVE_UFS_SM8350=1', '-DIOSTORAGE_NATIVE_ONLY=1',
+                *(['-DNATIVE_UFS_SM8350=1'] if _args.host == 'sm8350'
+                  else ['-DNATIVE_UFS_HOST_EXYNOS=1']),
+                *(['-DNATIVE_UFS_ROOT_PARTITION="%s"' % _args.root_partition]
+                  if _args.root_partition else []),
+                '-DIOSTORAGE_NATIVE_ONLY=1',
                 '-DNATIVE_UFS_PROGRESS_OBSERVER=0',
                 '-Wall', '-Wextra', '-Wno-unused-parameter', '-Wno-deprecated-declarations',
                 '-Wno-c99-designator', '-Wno-reorder-init-list']
@@ -107,8 +144,13 @@ def compile_one(source, record):
     if result.returncode:
         raise SystemExit(f'{source.name}: compilation failed\n{result.stdout}{result.stderr}')
     data = destination.read_bytes()
-    if struct.unpack_from('<4I', data) != (0xfeedfacf, 0x100000c, 0, 1):
-        raise SystemExit(f'{source.name}: expected ordinary ARM64 object')
+    # MH_MAGIC_64, CPU_TYPE_ARM64, MH_OBJECT, subtype ARM64_ALL (0) or ARM64E (2). The top byte is
+    # CPU_SUBTYPE_MASK, where arm64e carries its pointer-auth ABI version, so arm64e reads
+    # 0x80000002. An arm64e kernel can only link arm64e archives.
+    magic, cputype, cpusubtype, filetype = struct.unpack_from('<4I', data)
+    if (magic, cputype, filetype) != (0xfeedfacf, 0x100000c, 1) or (cpusubtype & ~0xff000000) not in (0, 2):
+        raise SystemExit(f'{source.name}: expected an ARM64 or ARM64E object, got '
+                         f'magic {magic:#x} cputype {cputype:#x} subtype {cpusubtype} filetype {filetype}')
     at, deployment = 32, None
     for _ in range(struct.unpack_from('<I', data, 16)[0]):
         kind, size = struct.unpack_from('<II', data, at)

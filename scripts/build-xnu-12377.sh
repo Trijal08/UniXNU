@@ -209,7 +209,22 @@ rebuild_on_change platform-personalities "$ARM_DT_PLATFORM:$ARMCPU" iokit/DEVELO
 NATIVE_DWC3_CONSOLE=$(flag XNU_NATIVE_DWC3_CONSOLE)
 SOURCE_PTHREAD=$(flag XNU_SOURCE_PTHREAD)
 NATIVE_UFS_SM8350=$(flag XNU_NATIVE_UFS_SM8350)
-EXTRA_CFLAGS="$EXTRA_CFLAGS -DXNU_NATIVE_UFS_SM8350=$NATIVE_UFS_SM8350"
+# XNU_NATIVE_UFS_EXYNOS builds the same storage archive against the ExynosUfs* glue already in the
+# driver instead of zeta's SM8350 source patch. XNU_UFS_ROOT_PARTITION names the GPT partition that
+# carries the root image (darwin on komodo, userdata on sheng).
+NATIVE_UFS_EXYNOS=$(flag XNU_NATIVE_UFS_EXYNOS)
+if [ "$NATIVE_UFS_SM8350" = 1 ] && [ "$NATIVE_UFS_EXYNOS" = 1 ]; then
+  echo 'pick one of XNU_NATIVE_UFS_SM8350 or XNU_NATIVE_UFS_EXYNOS' >&2
+  exit 1
+fi
+# The kernel-side define only says "a native UFS root exists"; it is named after the SoC zeta wrote
+# it for, so the Exynos path reuses it rather than patching XNU for a second name. Defined once, or
+# clang rejects the redefinition under -Werror.
+UFS_KERNEL_ROOT=$NATIVE_UFS_SM8350
+if [ "$NATIVE_UFS_EXYNOS" = 1 ]; then
+  UFS_KERNEL_ROOT=1
+fi
+EXTRA_CFLAGS="$EXTRA_CFLAGS -DXNU_NATIVE_UFS_SM8350=$UFS_KERNEL_ROOT"
 EXTRA_CFLAGS="$EXTRA_CFLAGS -DXNU_NATIVE_DWC3_CONSOLE=$NATIVE_DWC3_CONSOLE"
 rebuild_on_change native-dwc3-console "$NATIVE_DWC3_CONSOLE" pexpert/DEVELOPMENT/pe_serial.o osfmk/DEVELOPMENT/rtclock.o
 
@@ -250,7 +265,7 @@ for archive in $EXTRA_LD_ARCHIVES; do
   fi
   EXTRA_LD_FLAGS="$EXTRA_LD_FLAGS $archive"
 done
-if [ -n "$EXTRA_LD_ARCHIVES" ] || [ "$SOURCE_CRYPTO" = 1 ] || [ "$ARM_DT_PLATFORM" = 1 ] || [ "$ARMCPU" = 1 ] || [ "$NATIVE_DWC3_CONSOLE" = 1 ] || [ "$SOURCE_PTHREAD" = 1 ] || [ "$NATIVE_UFS_SM8350" = 1 ]; then
+if [ -n "$EXTRA_LD_ARCHIVES" ] || [ "$NATIVE_UFS_EXYNOS" = 1 ] || [ "$SOURCE_CRYPTO" = 1 ] || [ "$ARM_DT_PLATFORM" = 1 ] || [ "$ARMCPU" = 1 ] || [ "$NATIVE_DWC3_CONSOLE" = 1 ] || [ "$SOURCE_PTHREAD" = 1 ] || [ "$NATIVE_UFS_SM8350" = 1 ]; then
   # First produce the unlinked objects/filelist for collision discovery.
   # Bootstrap references are enabled only after the provider archive exists.
   rm -f "$OBJ/osfmk/DEVELOPMENT/prng_random.o" "$OBJ/pexpert/DEVELOPMENT/pe_init.o"
@@ -283,8 +298,15 @@ if [ -n "$EXTRA_LD_ARCHIVES" ] || [ "$SOURCE_CRYPTO" = 1 ] || [ "$ARM_DT_PLATFOR
     ARCHIVE_FLAGS="$ARCHIVE_FLAGS -Wl,-force_load,$archive"
     ARCHIVE_DEPENDENCIES="$ARCHIVE_DEPENDENCIES $archive"
   fi
-  if [ "$NATIVE_UFS_SM8350" = 1 ]; then
-    python3 scripts/build-storage-12377.py
+  if [ "$NATIVE_UFS_SM8350" = 1 ] || [ "$NATIVE_UFS_EXYNOS" = 1 ]; then
+    STORAGE_ARGS=()
+    if [ "$NATIVE_UFS_EXYNOS" = 1 ]; then
+      STORAGE_ARGS+=(--host exynos)
+    fi
+    if [ -n "${XNU_UFS_ROOT_PARTITION:-}" ]; then
+      STORAGE_ARGS+=(--root-partition "$XNU_UFS_ROOT_PARTITION")
+    fi
+    python3 scripts/build-storage-12377.py ${STORAGE_ARGS[@]+"${STORAGE_ARGS[@]}"}
     archive=$ROOT/build/storage-12377/libStorageUfs.a
     ARCHIVE_FLAGS="$ARCHIVE_FLAGS -Wl,-force_load,$archive"
     ARCHIVE_DEPENDENCIES="$ARCHIVE_DEPENDENCIES $archive"
