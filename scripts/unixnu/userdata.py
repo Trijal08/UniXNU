@@ -131,7 +131,7 @@ def build(ctx, dry_run=False):
         target.write(header)
     data = {'image_bytes': total, 'image_sha256': sha256_file(image), 'manifest_sha256': hashlib.sha256(bytes(header)).hexdigest(),
             'windows': [{'name': n, 'offset': o, 'size': s, 'sha256': d.hex()} for n, o, s, d in entries],
-            'userdata_bytes': capacity, 'flash_command': f'fastboot flash userdata {image}',
+            'userdata_bytes': capacity, 'flash_command': f'fastboot flash {spec.get("partition", "userdata")} {image}',
             'source': 'remote' if source.remote else 'local', 'hardware_tested': False}
     report.write_text(json.dumps(data, indent=2) + '\n')
     log(f'userdata: {image}')

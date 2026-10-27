@@ -35,6 +35,10 @@ FAKEROOT=$ROOT/.cache/xnu-$XNU_VERSION-fakeroot
 KDKROOT=$ROOT/.cache/xnu-$XNU_VERSION-kdk
 OUT=$ROOT/build/xnu-$XNU_VERSION
 PATCHES=$ROOT/patches/xnu-12377
+# The pinned sources for this kernel live outside refer/, which the tree assembler owns and rewrites
+# with the xnu-10063 feeds every time a step re-assembles the tree.
+REFER=${UNIXNU_REFER_12377:-$ROOT/.cache/refer-12377}
+mkdir -p "$REFER"
 
 clone() {  # clone DIR REPOSITORY TAG
   if [ ! -d "$1/.git" ]; then
@@ -42,30 +46,40 @@ clone() {  # clone DIR REPOSITORY TAG
   fi
 }
 
-clone refer/xnu xnu "$XNU_TAG"
-if [ "$(git -C refer/xnu rev-parse HEAD)" != "$XNU_COMMIT" ]; then
-  echo "error: refer/xnu is not $XNU_TAG ($XNU_COMMIT); run unixnu fetch with the xnu-12377 feeds" >&2
+clone "$REFER"/xnu xnu "$XNU_TAG"
+if [ "$(git -C "$REFER"/xnu rev-parse HEAD)" != "$XNU_COMMIT" ]; then
+  echo "error: "$REFER"/xnu is not $XNU_TAG ($XNU_COMMIT); run unixnu fetch with the xnu-12377 feeds" >&2
   exit 1
 fi
 if [ ! -d "$WORK/.git" ]; then
-  git clone --shared refer/xnu "$WORK"
+  git clone --shared "$REFER"/xnu "$WORK"
 fi
 if [ "$(git -C "$WORK" rev-parse HEAD)" != "$XNU_COMMIT" ]; then
   echo "error: $WORK is not at $XNU_COMMIT; remove it to start again" >&2
   exit 1
 fi
-# Apply the series in name order; a patch that is already in the tree is skipped.
-for PATCH in "$PATCHES"/*.patch; do
-  if ! git -C "$WORK" apply --reverse --check "$PATCH" >/dev/null 2>&1; then
-    git -C "$WORK" apply --check "$PATCH"
-    git -C "$WORK" apply "$PATCH"
+# Apply the series in name order. Patches in the series overlap (the BCM2837 board header and
+# board_config.h are touched by several), so once the series is in, an individual patch no longer
+# reverse-applies cleanly and cannot be tested one at a time. The whole series is stamped instead:
+# a work tree carrying the stamp of the current series is left alone, and any other work tree is
+# thrown away and re-cloned so the series always lands on pristine sources.
+SERIES_STAMP=$(cat "$PATCHES"/*.patch | sha256sum | cut -d' ' -f1)
+if [ "$(cat "$WORK/.unixnu-patch-series" 2>/dev/null)" != "$SERIES_STAMP" ]; then
+  if [ -n "$(git -C "$WORK" status --porcelain)" ]; then
+    echo "patches/xnu-12377 changed since $WORK was patched; re-cloning"
+    rm -rf "$WORK"
+    git clone --shared "$REFER"/xnu "$WORK"
   fi
-done
+  for PATCH in "$PATCHES"/*.patch; do
+    git -C "$WORK" apply "$PATCH"
+  done
+  echo "$SERIES_STAMP" > "$WORK/.unixnu-patch-series"
+fi
 
 if [ ! -x "$FAKEROOT/usr/local/libexec/availability.pl" ]; then
-  clone refer/AvailabilityVersions AvailabilityVersions "$AVAILABILITY_TAG"
+  clone "$REFER"/AvailabilityVersions AvailabilityVersions "$AVAILABILITY_TAG"
   mkdir -p "$FAKEROOT"
-  make -C refer/AvailabilityVersions install -j"$JOBS" \
+  make -C "$REFER"/AvailabilityVersions install -j"$JOBS" \
     OBJROOT="$OUT/availability" SYMROOT="$OUT/availability" \
     DSTROOT="$FAKEROOT" CMAKE="$(command -v cmake)" NINJA="$(command -v ninja)"
 fi
@@ -73,19 +87,19 @@ export XNU_AVAILABILITY_PL=$FAKEROOT/usr/local/libexec/availability.pl
 
 python3 scripts/kdk-headers.py --url "$KDK_URL" --sha256 "$KDK_SHA256" --cache .cache/kdk "$KDKROOT"
 
-clone refer/libplatform libplatform "$LIBPLATFORM_TAG"
+clone "$REFER"/libplatform libplatform "$LIBPLATFORM_TAG"
 mkdir -p "$FAKEROOT/usr/local/include/kernel"
-ditto refer/libplatform/include "$FAKEROOT/usr/local/include"
-ditto refer/libplatform/private "$FAKEROOT/usr/local/include"
-ditto refer/libplatform/private/platform "$FAKEROOT/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/platform"
+ditto "$REFER"/libplatform/include "$FAKEROOT/usr/local/include"
+ditto "$REFER"/libplatform/private "$FAKEROOT/usr/local/include"
+ditto "$REFER"/libplatform/private/platform "$FAKEROOT/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/platform"
 
-clone refer/libdispatch libdispatch "$LIBDISPATCH_TAG"
+clone "$REFER"/libdispatch libdispatch "$LIBDISPATCH_TAG"
 python3 - "$FAKEROOT/usr/local/include/os" <<'PY'
 from pathlib import Path
 import subprocess, sys
 output = Path(sys.argv[1])
 output.mkdir(parents=True, exist_ok=True)
-for header in Path('refer/libdispatch/os').glob('*.h'):
+for header in Path('"$REFER"/libdispatch/os').glob('*.h'):
     result = subprocess.run(['unifdef', '-DKERNEL=1', '-DOS_FIREHOSE_SPI=1',
                              '-DOS_VOUCHER_ACTIVITY_SPI_TYPES=1',
                              '-UOS_VOUCHER_ACTIVITY_SPI', str(header)], capture_output=True)
@@ -107,7 +121,7 @@ fi
 # libfirehose_kernel.a for the kernel link (LD_KERNEL_ARCHIVES), arm64 like the kernel.
 if [ ! -f "$FAKEROOT/usr/local/lib/kernel/libfirehose_kernel.a" ]; then
   if [ ! -d ".cache/libdispatch-$LIBDISPATCH_TAG-work/.git" ]; then
-    git clone --shared refer/libdispatch ".cache/libdispatch-$LIBDISPATCH_TAG-work"
+    git clone --shared "$REFER"/libdispatch ".cache/libdispatch-$LIBDISPATCH_TAG-work"
   fi
   python3 - ".cache/libdispatch-$LIBDISPATCH_TAG-work/xcodeconfig/libfirehose_kernel.xcconfig" <<'PY'
 from pathlib import Path
@@ -311,7 +325,7 @@ if [ -n "$EXTRA_LD_ARCHIVES" ] || [ "$NATIVE_UFS_EXYNOS" = 1 ] || [ "$SOURCE_CRY
     fi
   done
   if [ "$SOURCE_PTHREAD" = 1 ]; then
-    clone refer/libpthread-539 libpthread libpthread-539.100.4
+    clone "$REFER"/libpthread-539 libpthread libpthread-539.100.4
     python3 scripts/build-pthread-12377.py
     archive=$ROOT/build/libpthread-12377/libpthread_kernel.a
     ARCHIVE_FLAGS="$ARCHIVE_FLAGS -Wl,-force_load,$archive"

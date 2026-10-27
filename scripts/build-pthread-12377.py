@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build public libpthread 539 against XNU 12377 headers and its versioned shims."""
 import json
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -9,7 +10,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from xnu_symbols import kernel_names
-SOURCE = ROOT / 'refer/libpthread-539'
+SOURCE = Path(os.environ.get('UNIXNU_REFER_12377', ROOT / '.cache/refer-12377')) / 'libpthread-539'
 REVISION = '1f4f5265b319111142f1bf3a27d4484ef5a98314'
 if subprocess.check_output(['git', '-C', SOURCE, 'rev-parse', 'HEAD'], text=True).strip() != REVISION:
     raise SystemExit('Unexpected libpthread source revision')

@@ -1,0 +1,73 @@
+Satisfy the two kinds of link reference an upstream-clang kernel build cannot resolve.
+
+apple-clang drops C++ static destructors when it compiles kernel code; upstream clang keeps the
+ones marked LIBKERN_ALWAYS_DESTROY and registers them with __cxa_atexit, which the kernel does
+not have. And the PGO buffer writers OSKext declares come from libprofile_rt in the Xcode
+toolchain, which the open-source build does not have either.
+
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -11114,6 +11114,39 @@
+ 	const char *NamesEnd);
+ }
+ 
++#if !defined(XNU_PROFILE_RUNTIME) || !XNU_PROFILE_RUNTIME
++/*
++ * Apple links libprofile_rt out of the Xcode toolchain for these two. The open-source build has no
++ * profile runtime, and no kext it loads carries the __llvm_prf_* sections that OSKextGrabPgoDataLocked
++ * needs, so it returns ENOTSUP long before reaching them. Define them to report an empty buffer and a
++ * write failure, which turns a kPgoAll kext request into EIO rather than a link error.
++ */
++extern "C" {
++uint64_t
++__llvm_profile_get_size_for_buffer_internal(
++	const char *DataBegin __unused, const char *DataEnd __unused,
++	const char *CountersBegin __unused, const char *CountersEnd __unused,
++	const char *BitmapBegin __unused, const char *BitmapEnd __unused,
++	const char *NamesBegin __unused, const char *NamesEnd __unused,
++	const char *VTableBegin __unused, const char *VTableEnd __unused,
++	const char *VNamesBegin __unused, const char *VNamesEnd __unused)
++{
++	return 0;
++}
++
++int
++__llvm_profile_write_buffer_internal(
++	char *Buffer __unused,
++	const char *DataBegin __unused, const char *DataEnd __unused,
++	const char *CountersBegin __unused, const char *CountersEnd __unused,
++	const char *BitmapBegin __unused, const char *BitmapEnd __unused,
++	const char *NamesBegin __unused, const char *NamesEnd __unused)
++{
++	return -1;
++}
++}
++#endif /* !XNU_PROFILE_RUNTIME */
++
+ static
+ void
+ OSKextPgoMetadataPut(char *pBuffer,
+--- a/libkern/c++/OSRuntime.cpp
++++ b/libkern/c++/OSRuntime.cpp
+@@ -110,6 +110,21 @@
+ }
+ #endif
+ 
++/*
++ * apple-clang drops the destructors of objects with static storage duration when it compiles kernel
++ * code, so Apple's kernel link never sees this symbol. Upstream clang keeps a destructor that is
++ * marked LIBKERN_ALWAYS_DESTROY (libsa's sBootstrapObject is one) and registers it here, which
++ * neither -fc++-static-destructors=none nor -fno-register-global-dtors-with-atexit overrides.
++ *
++ * The kernel never tears its own address space down, so a registration that can never be run is
++ * simply dropped: that is the behaviour apple-clang compiles in, reached from the other side.
++ */
++extern "C" int
++__cxa_atexit(void (*func)(void *) __unused, void *arg __unused, void *dso __unused)
++{
++	return 0;
++}
++
+ extern lck_grp_t * IOLockGroup;
+ extern kmod_info_t g_kernel_kmod_info;
+ #if CONFIG_SPTM

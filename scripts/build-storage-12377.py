@@ -14,7 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from xnu_symbols import kernel_names
 
-SOURCE = ROOT / 'refer/IOStorageFamily'
+# See build-xnu-12377.sh: refer/ is rewritten by the tree assembler, so the pinned sources
+# for this kernel live in .cache/refer-12377 instead.
+SOURCE = Path(os.environ.get('UNIXNU_REFER_12377', ROOT / '.cache/refer-12377')) / 'IOStorageFamily'
 REVISION = '7edb88fbae296fb7c8ce2f64e115e116e566d51c'
 if subprocess.check_output(['git', '-C', SOURCE, 'rev-parse', 'HEAD'], text=True).strip() != REVISION:
     raise SystemExit('Expected pinned IOStorageFamily 337.100.1')
