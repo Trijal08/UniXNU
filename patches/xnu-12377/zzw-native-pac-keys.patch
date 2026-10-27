@@ -1,0 +1,61 @@
+Program the pointer-authentication keys on hardware that has neither a monitor nor a hypervisor.
+
+PAC_INIT_KEY_STATE, SET_JOP_KEY_REGISTERS and SET_ROP_KEY_REGISTERS are all guarded by
+HAS_PARAVIRTUALIZED_PAC, so on a board that is not VMAPPLE every one of them expands to
+nothing: SCTLR_EL1_DEFAULT turns signing on (EnIA/EnIB/EnDA/EnDB) against key registers that
+are UNKNOWN out of reset, and the first thing arm_init does is OSRuntimeSignStructors, which
+signs every __mod_init_func pointer in place. Apple silicon does not need this macro because
+iBoot programs the keys before XNU runs.
+
+The keys are architectural (FEAT_PAuth), so no Apple register encodings are involved; mainline
+Linux writes the same registers in __ptrauth_keys_init_cpu. Linux programs only APIAKey for the
+kernel because pac-ret signs return addresses with it, while arm64e uses IA and IB for pointers,
+DA and DB for data and GA for pacga, so all five pairs are written here. The call site in
+common_start already runs before the SCTLR_EL1 write, which is the order Linux uses too:
+install the keys, then enable them.
+
+--- a/osfmk/arm64/pac_asm.h
++++ b/osfmk/arm64/pac_asm.h
+@@ -158,6 +158,42 @@
+ 	mov		x0, #VMAPPLE_PAC_SET_INITIAL_STATE
+ 	hvc		#0
+ 	cbnz		x0, .
++#elif defined(ARM64_BOARD_CONFIG_BCM2837)
++	/*
++	 * Native FEAT_PAuth hardware with neither a monitor nor a hypervisor to ask. Upstream has only
++	 * the paravirtualized path above, because VMAPPLE was its only pointer-authentication consumer
++	 * and Apple's own silicon has iBoot program these registers before XNU runs. On a board where
++	 * neither is true the macro expanded to nothing: SCTLR_EL1 enables signing (EnIA/EnIB/EnDA/EnDB)
++	 * against key registers that are UNKNOWN out of reset, and the first thing arm_init does is
++	 * OSRuntimeSignStructors, which signs every __mod_init_func pointer in place.
++	 *
++	 * The keys are architectural, so writing them needs no Apple register encodings. The values are
++	 * fixed and identical on every core deliberately: a kernel pointer signed on one core has to
++	 * authenticate on another, so a per-core random key would break SMP, and there is no seed to
++	 * read this early in common_start. They are bring-up keys, not secrets -- diversifying them per
++	 * boot wants a value the loader passes in, which is a later change.
++	 */
++	MOV64	\tmp, 0x4b6f6d6f646f4941
++	MOV64	\tmp2, 0x6b65795f41414141
++	msr		APIAKeyLo_EL1, \tmp
++	msr		APIAKeyHi_EL1, \tmp2
++	MOV64	\tmp, 0x4b6f6d6f646f4942
++	MOV64	\tmp2, 0x6b65795f42424242
++	msr		APIBKeyLo_EL1, \tmp
++	msr		APIBKeyHi_EL1, \tmp2
++	MOV64	\tmp, 0x4b6f6d6f646f4441
++	MOV64	\tmp2, 0x6b65795f44414441
++	msr		APDAKeyLo_EL1, \tmp
++	msr		APDAKeyHi_EL1, \tmp2
++	MOV64	\tmp, 0x4b6f6d6f646f4442
++	MOV64	\tmp2, 0x6b65795f44424442
++	msr		APDBKeyLo_EL1, \tmp
++	msr		APDBKeyHi_EL1, \tmp2
++	MOV64	\tmp, 0x4b6f6d6f646f4741
++	MOV64	\tmp2, 0x6b65795f47414741
++	msr		APGAKeyLo_EL1, \tmp
++	msr		APGAKeyHi_EL1, \tmp2
++	isb		sy
+ #endif /* HAS_PARAVIRTUALIZED_PAC */
+ .endmacro
+ 
